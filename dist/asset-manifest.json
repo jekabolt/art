@@ -1,0 +1,29 @@
+{
+  "files": {
+    "main.css": "/static/css/main.c86a44a6.css",
+    "main.js": "/static/js/main.5b6e0242.js",
+    "static/js/787.ccbc6c70.chunk.js": "/static/js/787.ccbc6c70.chunk.js",
+    "static/media/refraction_geometry.obj": "/static/media/refraction_geometry.1b79811828f22c1cb1f4.obj",
+    "static/media/smiley.png": "/static/media/smiley.ac6b4ca20c2338e20a84.png",
+    "static/media/melt_logo.png": "/static/media/melt_logo.e455a46507069a74ff52.png",
+    "static/media/noise.png": "/static/media/noise.89f30d33ff3a0f0c8c31.png",
+    "static/media/ANIMATION_WATERFALL.jpg": "/static/media/ANIMATION_WATERFALL.df63f0f73880ceffed80.jpg",
+    "static/media/MELT__LOGO.png": "/static/media/MELT__LOGO.de556b1d518dcb5c7c3a.png",
+    "static/media/TOOL_MELTER.jpg": "/static/media/TOOL_MELTER.1b00bab76f6bbae9c87e.jpg",
+    "static/media/ANIMATION_LOGO.jpg": "/static/media/ANIMATION_LOGO.49a9216ffd7c6b60f9b2.jpg",
+    "static/media/melt_logo_fade.png": "/static/media/melt_logo_fade.25649929af00e3299f43.png",
+    "static/media/MELT__DRIPPY__YELLOW.svg": "/static/media/MELT__DRIPPY__YELLOW.e98f8de78b940afb2e9553b823f82acb.svg",
+    "static/media/MELT__DRIPPY.svg": "/static/media/MELT__DRIPPY.b9bf7fab634beb2036259f4e0210fda2.svg",
+    "static/media/MELT__PASSWORD_HIDDEN.svg": "/static/media/MELT__PASSWORD_HIDDEN.887b0a23ee5e14696f09f46a0b8884e6.svg",
+    "static/media/MELT__PASSWORD_VISIBLE.svg": "/static/media/MELT__PASSWORD_VISIBLE.b28784d4ec578de4f0bd1eba9021c416.svg",
+    "index.html": "/index.html",
+    "static/media/MELT__ARROW_DOWN.svg": "/static/media/MELT__ARROW_DOWN.c294d289ee3d182b381ac8a7846b9cef.svg",
+    "main.c86a44a6.css.map": "/static/css/main.c86a44a6.css.map",
+    "main.5b6e0242.js.map": "/static/js/main.5b6e0242.js.map",
+    "787.ccbc6c70.chunk.js.map": "/static/js/787.ccbc6c70.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.c86a44a6.css",
+    "static/js/main.5b6e0242.js"
+  ]
+}
