@@ -42,8 +42,16 @@ void main(){
   vColor = color;
 
   vec3 p = position;
+  
+  float rotationAngle = ang * info.x * 0.01;
+  
+  // Define a default threshold value
+  float threshold = 0.01;
 
-  p = rotate(p, ang * info.x * 0.01, vec3(0.0, 0.0, 1.0));
+  // Apply rotation only if the angle exceeds the threshold
+  if (abs(rotationAngle) > threshold) {
+    p = rotate(p, rotationAngle, vec3(0.0, 0.0, 0.0));
+  }
 
   vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
 

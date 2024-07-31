@@ -5,7 +5,7 @@ export class Conf {
 
   public FLG_PARAM: boolean = location.href.includes('p=yes');
   public FLG_STATS: boolean = location.href.includes('p=yes');
-  public FLG_TEST: boolean = location.href.includes('10.0.1.33') || location.href.includes('localhost');
+  public FLG_TEST: boolean = location.href.includes('10.0.1.33') || location.href.includes('localhost') ;
 
   // パス
   public PATH_IMG: string = './assets/img/';
