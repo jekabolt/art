@@ -1,11 +1,9 @@
-import GUI from "lil-gui";
-
 const canvasEl = document.querySelector("canvas");
 const textureEl = document.createElement("canvas");
 const textureCtx = textureEl.getContext("2d");
 
 const params = {
-    imageSrc: "assets/img/sample-0.png", // Path to your PNG image
+    imageSrc: "assets/img/sample-3.png", // Path to your PNG image
     pointerSize: null,
     color: { r: 1., g: .0, b: .5 }
 };
@@ -48,7 +46,7 @@ gl.enableVertexAttribArray(0);
 
 loadImageAndCreateTexture(params.imageSrc);
 initFBOs();
-createControls();
+// createControls();
 setupEvents();
 resizeCanvas();
 window.addEventListener("resize", resizeCanvas);
@@ -334,14 +332,14 @@ function updateMousePosition(eX, eY) {
     pointer.y = eY;
 }
 
-function createControls() {
-    const gui = new GUI();
-    gui.close();
+// function createControls() {
+//     const gui = new GUI();
+//     gui.close();
 
-    gui
-        .add(params, "imageSrc")
-        .onChange(loadImageAndCreateTexture)
-        .name("Image Source");
-    gui
-        .addColor(params, "color");
-}
+//     gui
+//         .add(params, "imageSrc")
+//         .onChange(loadImageAndCreateTexture)
+//         .name("Image Source");
+//     gui
+//         .addColor(params, "color");
+// }
