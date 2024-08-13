@@ -1,0 +1,33 @@
+{
+    "name": "fluid-simulation",
+    "version": "1.0.0",
+    "description": "A fluid simulation project",
+    "main": "src/script.js",
+    "scripts": {
+        "build": "webpack --mode production",
+        "serve": "webpack serve --open",
+        "start": "npm run build && npm run serve"
+    },
+    "devDependencies": {
+        "@babel/core": "^7.15.0",
+        "@babel/preset-env": "^7.15.0",
+        "babel-loader": "^8.2.2",
+        "copy-webpack-plugin": "^12.0.2",
+        "html-webpack-plugin": "^5.5.0",
+        "http-server": "^0.12.3",
+        "webpack": "^5.64.0",
+        "webpack-cli": "^4.9.1",
+        "webpack-dev-server": "^4.7.4"
+    },
+    "babel": {
+        "presets": [
+            "@babel/preset-env"
+        ]
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "glslify-loader": "^2.0.0",
+        "lil-gui": "^0.19.2"
+    }
+}
