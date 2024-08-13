@@ -10,15 +10,6 @@ const params = {
     color: { r: 1., g: .0, b: .5 }
 };
 
-const colorOptions = [
-    { r: 1.0, g: 0.0, b: 0.5 },
-    { r: 1.0, g: 0.1, b: 1.0 }
-];
-
-function getRandomColor() {
-    const randomIndex = Math.floor(Math.random() * colorOptions.length);
-    return colorOptions[randomIndex];
-}
 
 const pointer = {
     x: 0,
@@ -260,9 +251,8 @@ function render(t) {
         blit(velocity.write());
         velocity.swap();
 
-        const randomColor = getRandomColor();
         gl.uniform1i(splatProgram.uniforms.u_input_texture, outputColor.read().attach(1));
-        gl.uniform3f(splatProgram.uniforms.u_point_value, 1. - randomColor.r, 1. - randomColor.g, 1. - randomColor.b);
+        gl.uniform3f(splatProgram.uniforms.u_point_value, 1. - params.color.r, 1. - params.color.g, 1. - params.color.b);
         blit(outputColor.write());
         outputColor.swap();
     }
