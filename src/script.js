@@ -1,29 +1,25 @@
-// Cloth simulation with texture, mouse interaction, wind always blowing from left to right.
-// GUI is removed for a cleaner, more CPU-efficient setup.
-// Adjust parameters directly in code if needed.
-
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
 
+// Adjust for mobile performance
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-var img = new Image();
-img.src = "https://files.grbpwr.com/new-texture-300.png";
-
-// Cloth dimensions and parameters
-var width = 10;
-var height = 10;
+// Smaller cloth for mobile
+var width = 8;
+var height = 8;
 var nodeCount = width * height;
 
 var dt = 1 / 60;
 var gravity = 9.8;
+var iterations = 10; // fewer constraint iterations
+var wind_strength = 15; // lower wind strength
+var speed = 0.2; // slower wind changes
+var stiffness = 0.9; // slightly less stiff to ease CPU
 
-// Parameters (previously adjustable via GUI, now fixed)
-var iterations = 15;
-var wind_strength = 20;
-var speed = 0.3;
-var stiffness = 0.95;
+var img = new Image();
+// Use a smaller image if possible
+img.src = "https://files.grbpwr.com/new-texture-300.png";
 
 var nodes = [];
 var nodes_uv = [];
@@ -35,6 +31,7 @@ var dx = delta;
 var dy = delta;
 var max_dist = delta * stiffness;
 
+// Create nodes
 for (var i = 0; i < nodeCount; i++) {
     var xIndex = i % width;
     var yIndex = Math.floor(i / width);
@@ -54,7 +51,7 @@ for (var i = 0; i < nodeCount; i++) {
     nodes_uv.push({ u: u, v: v });
 }
 
-// Pin the left side to act like a flagpole
+// Pin the left side
 for (var yy = 0; yy < height; yy++) {
     nodes[yy * width].static = true;
 }
@@ -72,7 +69,6 @@ for (i = 0; i < nodeCount - width; i++) {
 var mean = 0;
 var mean_2 = -width;
 
-// Always positive wind, blowing left to right
 function updateWind() {
     mean += speed;
     if (mean > width * 1.5) mean = -0.5 * width;
@@ -81,7 +77,7 @@ function updateWind() {
     if (mean_2 > width * 1.5) mean_2 = -0.5 * width;
 
     for (i = 0; i < nodeCount; i++) {
-        // Wind is always positive
+        // Wind always positive (left to right)
         var baseWind = (0.5 + Math.random() * 0.5) * wind_strength;
         wind[i] = baseWind;
     }
@@ -140,25 +136,24 @@ function moveCloth() {
     }
 }
 
+// Touch interaction for mobile
 var active_node = -1;
-var mouse_pos_x, mouse_pos_y;
 var drag = false;
 
-// Mouse interaction
-canvas.addEventListener('mousemove', function(event) {
-    mouse_pos_x = event.clientX;
-    mouse_pos_y = event.clientY;
-    if (drag && active_node != -1) {
-        nodes[active_node].x = mouse_pos_x;
-        nodes[active_node].y = mouse_pos_y;
-        nodes[active_node].last_x = mouse_pos_x;
-        nodes[active_node].last_y = mouse_pos_y;
-    }
-});
-canvas.addEventListener('mousedown', function(event) {
+function getTouchPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top
+    };
+}
+
+canvas.addEventListener('touchstart', function(e) {
+    e.preventDefault();
     drag = true;
-    mouse_pos_x = event.clientX;
-    mouse_pos_y = event.clientY;
+    var pos = getTouchPos(e);
+    var mouse_pos_x = pos.x;
+    var mouse_pos_y = pos.y;
     active_node = -1;
     for (var l = 0; l < nodes.length; l++) {
         if (dist(mouse_pos_x - nodes[l].x, mouse_pos_y - nodes[l].y) < 20) {
@@ -171,7 +166,20 @@ canvas.addEventListener('mousedown', function(event) {
         }
     }
 });
-canvas.addEventListener('mouseup', function(event) {
+
+canvas.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    if (drag && active_node != -1) {
+        var pos = getTouchPos(e);
+        nodes[active_node].x = pos.x;
+        nodes[active_node].y = pos.y;
+        nodes[active_node].last_x = pos.x;
+        nodes[active_node].last_y = pos.y;
+    }
+});
+
+canvas.addEventListener('touchend', function(e) {
+    e.preventDefault();
     drag = false;
     active_node = -1;
 });
@@ -204,7 +212,6 @@ function drawTriangleWarp(ctx, image,
 
 function drawCloth() {
     if (!img.complete || img.width === 0) return;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     for (var y = 0; y < height - 1; y++) {
