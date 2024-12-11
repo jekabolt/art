@@ -1,345 +1,252 @@
-const canvasEl = document.querySelector("canvas");
-const textureEl = document.createElement("canvas");
-const textureCtx = textureEl.getContext("2d");
+// Cloth simulation with texture, mouse interaction, wind always blowing from left to right.
+// GUI is removed for a cleaner, more CPU-efficient setup.
+// Adjust parameters directly in code if needed.
 
-const params = {
-    imageSrc: "assets/img/sample-3.png", // Path to your PNG image
-    pointerSize: null,
-    color: { r: 1., g: .0, b: .5 }
-};
+var canvas = document.getElementById("canvas");
+var ctx = canvas.getContext("2d");
 
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-const pointer = {
-    x: 0,
-    y: 0,
-    dx: 0,
-    dy: 0,
-    moved: false,
-};
+var img = new Image();
+img.src = "https://files.grbpwr.com/new-texture-300.png";
 
-let outputColor, velocity, divergence, pressure, canvasTexture;
-let isPreview = true;
+// Cloth dimensions and parameters
+var width = 10;
+var height = 10;
+var nodeCount = width * height;
 
-const gl = canvasEl.getContext("webgl");
-gl.getExtension("OES_texture_float");
+var dt = 1 / 60;
+var gravity = 9.8;
 
-const vertexShader = createShader(
-    document.getElementById("vertShader").innerHTML,
-    gl.VERTEX_SHADER);
+// Parameters (previously adjustable via GUI, now fixed)
+var iterations = 15;
+var wind_strength = 20;
+var speed = 0.3;
+var stiffness = 0.95;
 
-const splatProgram = createProgram("fragShaderPoint");
-const divergenceProgram = createProgram("fragShaderDivergence");
-const pressureProgram = createProgram("fragShaderPressure");
-const gradientSubtractProgram = createProgram("fragShaderGradientSubtract");
-const advectionProgram = createProgram("fragShaderAdvection");
-const outputShaderProgram = createProgram("fragShaderOutputShader");
+var nodes = [];
+var nodes_uv = [];
+var links = [];
+var wind = [];
 
-gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1,
-    1, 1,
-    1, -1
-]), gl.STATIC_DRAW);
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
-gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-gl.enableVertexAttribArray(0);
+var delta = Math.min((canvas.width / 2) / (width * 1.5), (canvas.height / 2) / (height * 1.5));
+var dx = delta;
+var dy = delta;
+var max_dist = delta * stiffness;
 
-loadImageAndCreateTexture(params.imageSrc);
-initFBOs();
-// createControls();
-setupEvents();
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
+for (var i = 0; i < nodeCount; i++) {
+    var xIndex = i % width;
+    var yIndex = Math.floor(i / width);
+    var xPos = canvas.width / 2 - (width / 2) * dx + xIndex * dx;
+    var yPos = canvas.height / 2 - (height / 2) * dy + yIndex * dy;
 
-render();
-
-function loadImageAndCreateTexture(src) {
-    const image = new Image();
-    image.onload = () => {
-        canvasTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, canvasTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        updateImageCanvas(image);
-    };
-    image.src = src;
-}
-
-function updateImageCanvas(image) {
-    // Clear the canvas
-    textureCtx.clearRect(0, 0, textureEl.width, textureEl.height);
-
-    // Calculate the aspect ratio of the image and the canvas
-    const imageAspectRatio = image.width / image.height;
-    const canvasAspectRatio = textureEl.width / textureEl.height;
-
-    let drawWidth, drawHeight;
-
-    // Determine the dimensions for the image to maintain its aspect ratio
-    if (canvasAspectRatio > imageAspectRatio) {
-        drawHeight = textureEl.height;
-        drawWidth = imageAspectRatio * drawHeight;
-    } else {
-        drawWidth = textureEl.width;
-        drawHeight = drawWidth / imageAspectRatio;
-    }
-
-    // Calculate the position to center the image on the canvas
-    const offsetX = (textureEl.width - drawWidth) / 2;
-    const offsetY = (textureEl.height - drawHeight) / 2;
-
-    // Draw the image on the canvas with calculated dimensions
-    textureCtx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-
-    // Update the WebGL texture with the canvas content
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, canvasTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureEl);
-}
-
-function createProgram(elId) {
-    const shader = createShader(
-        document.getElementById(elId).innerHTML,
-        gl.FRAGMENT_SHADER);
-    const program = createShaderProgram(vertexShader, shader);
-    const uniforms = getUniforms(program);
-    return {
-        program,
-        uniforms
-    }
-}
-
-function createShaderProgram(vertexShader, fragmentShader) {
-    const program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error("Unable to initialize the shader program: " + gl.getProgramInfoLog(program));
-        return null;
-    }
-
-    return program;
-}
-
-function getUniforms(program) {
-    let uniforms = [];
-    let uniformCount = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-    for (let i = 0; i < uniformCount; i++) {
-        let uniformName = gl.getActiveUniform(program, i).name;
-        uniforms[uniformName] = gl.getUniformLocation(program, uniformName);
-    }
-    return uniforms;
-}
-
-function createShader(sourceCode, type) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, sourceCode);
-    gl.compileShader(shader);
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
-    }
-
-    return shader;
-}
-
-function blit(target) {
-    if (target == null) {
-        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    } else {
-        gl.viewport(0, 0, target.width, target.height);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
-    }
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-}
-
-function initFBOs() {
-    const fboSize = [
-        Math.floor(.5 * window.innerWidth),
-        Math.floor(.5 * window.innerHeight),
-    ]
-    outputColor = createDoubleFBO(fboSize[0], fboSize[1]);
-    velocity = createDoubleFBO(fboSize[0], fboSize[1], gl.RG);
-    divergence = createFBO(fboSize[0], fboSize[1], gl.RGB);
-    pressure = createDoubleFBO(fboSize[0], fboSize[1], gl.RGB);
-}
-
-
-function createFBO(w, h, type = gl.RGBA) {
-    gl.activeTexture(gl.TEXTURE0);
-
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texImage2D(gl.TEXTURE_2D, 0, type, w, h, 0, type, gl.FLOAT, null);
-
-    const fbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-    gl.viewport(0, 0, w, h);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    return {
-        fbo,
-        width: w,
-        height: h,
-        attach(id) {
-            gl.activeTexture(gl.TEXTURE0 + id);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            return id;
-        }
-    };
-}
-
-function createDoubleFBO(w, h, type) {
-    let fbo1 = createFBO(w, h, type);
-    let fbo2 = createFBO(w, h, type);
-
-    return {
-        width: w,
-        height: h,
-        texelSizeX: 1. / w,
-        texelSizeY: 1. / h,
-        read: () => {
-            return fbo1;
-        },
-        write: () => {
-            return fbo2;
-        },
-        swap() {
-            let temp = fbo1;
-            fbo1 = fbo2;
-            fbo2 = temp;
-        }
-    }
-}
-
-function render(t) {
-
-    const dt = 1 / 60;
-
-    if (t && isPreview) {
-        updateMousePosition(
-            (.5 - .45 * Math.sin(.003 * t - 2)) * window.innerWidth,
-            (.5 + .1 * Math.sin(.0025 * t) + .1 * Math.cos(.002 * t)) * window.innerHeight
-        );
-    }
-
-    if (pointer.moved) {
-        if (!isPreview) {
-            pointer.moved = false;
-        }
-
-        gl.useProgram(splatProgram.program);
-        gl.uniform1i(splatProgram.uniforms.u_input_texture, velocity.read().attach(1));
-        gl.uniform1f(splatProgram.uniforms.u_ratio, canvasEl.width / canvasEl.height);
-        gl.uniform2f(splatProgram.uniforms.u_point, pointer.x / canvasEl.width, 1 - pointer.y / canvasEl.height);
-        gl.uniform3f(splatProgram.uniforms.u_point_value, pointer.dx, -pointer.dy, 1);
-        gl.uniform1f(splatProgram.uniforms.u_point_size, params.pointerSize);
-        blit(velocity.write());
-        velocity.swap();
-
-        gl.uniform1i(splatProgram.uniforms.u_input_texture, outputColor.read().attach(1));
-        gl.uniform3f(splatProgram.uniforms.u_point_value, 1. - params.color.r, 1. - params.color.g, 1. - params.color.b);
-        blit(outputColor.write());
-        outputColor.swap();
-    }
-
-    gl.useProgram(divergenceProgram.program);
-    gl.uniform2f(divergenceProgram.uniforms.u_texel, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(divergenceProgram.uniforms.u_velocity_texture, velocity.read().attach(1));
-    blit(divergence);
-
-    gl.useProgram(pressureProgram.program);
-    gl.uniform2f(pressureProgram.uniforms.u_texel, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(pressureProgram.uniforms.u_divergence_texture, divergence.attach(1));
-
-    for (let i = 0; i < 10; i++) {
-        gl.uniform1i(pressureProgram.uniforms.u_pressure_texture, pressure.read().attach(2));
-        blit(pressure.write());
-        pressure.swap();
-    }
-
-    gl.useProgram(gradientSubtractProgram.program);
-    gl.uniform2f(gradientSubtractProgram.uniforms.u_texel, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(gradientSubtractProgram.uniforms.u_pressure_texture, pressure.read().attach(1));
-    gl.uniform1i(gradientSubtractProgram.uniforms.u_velocity_texture, velocity.read().attach(2));
-    blit(velocity.write());
-    velocity.swap();
-
-    gl.useProgram(advectionProgram.program);
-    gl.uniform1f(advectionProgram.uniforms.u_use_text, 0);
-    gl.uniform2f(advectionProgram.uniforms.u_texel, velocity.texelSizeX, velocity.texelSizeY);
-    gl.uniform1i(advectionProgram.uniforms.u_velocity_texture, velocity.read().attach(1));
-    gl.uniform1i(advectionProgram.uniforms.u_input_texture, velocity.read().attach(1));
-    gl.uniform1f(advectionProgram.uniforms.u_dt, dt);
-    blit(velocity.write());
-    velocity.swap();
-
-    gl.useProgram(advectionProgram.program);
-    gl.uniform1f(advectionProgram.uniforms.u_use_text, 1);
-    gl.uniform2f(advectionProgram.uniforms.u_texel, outputColor.texelSizeX, outputColor.texelSizeY);
-    gl.uniform1i(advectionProgram.uniforms.u_input_texture, outputColor.read().attach(2));
-    blit(outputColor.write());
-    outputColor.swap();
-
-    gl.useProgram(outputShaderProgram.program);
-    gl.uniform1i(outputShaderProgram.uniforms.u_output_texture, outputColor.read().attach(1));
-
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-
-    requestAnimationFrame(render);
-}
-
-function resizeCanvas() {
-    loadImageAndCreateTexture(params.imageSrc);
-    params.pointerSize = 4 / window.innerHeight;
-    canvasEl.width = textureEl.width = window.innerWidth;
-    canvasEl.height = textureEl.height = window.innerHeight;
-    render()
-}
-
-function setupEvents() {
-    canvasEl.addEventListener("mousemove", (e) => {
-        isPreview = false;
-        updateMousePosition(e.pageX, e.pageY);
+    nodes.push({
+        x: xPos,
+        y: yPos,
+        last_x: xPos,
+        last_y: yPos,
+        static: false
     });
 
-    canvasEl.addEventListener("touchmove", (e) => {
-        e.preventDefault();
-        isPreview = false;
-        updateMousePosition(e.targetTouches[0].pageX, e.targetTouches[0].pageY);
-    });
+    var u = xIndex / (width - 1);
+    var v = yIndex / (height - 1);
+    nodes_uv.push({ u: u, v: v });
 }
 
-function updateMousePosition(eX, eY) {
-    pointer.moved = true;
-    pointer.dx = 5 * (eX - pointer.x);
-    pointer.dy = 5 * (eY - pointer.y);
-    pointer.x = eX;
-    pointer.y = eY;
+// Pin the left side to act like a flagpole
+for (var yy = 0; yy < height; yy++) {
+    nodes[yy * width].static = true;
 }
 
-// function createControls() {
-//     const gui = new GUI();
-//     gui.close();
+// Create links
+for (i = 0; i < nodeCount - 1; i++) {
+    if (((i + 1) % width) > 0) {
+        links.push({ first: i, second: i + 1 });
+    }
+}
+for (i = 0; i < nodeCount - width; i++) {
+    links.push({ first: i, second: i + width });
+}
 
-//     gui
-//         .add(params, "imageSrc")
-//         .onChange(loadImageAndCreateTexture)
-//         .name("Image Source");
-//     gui
-//         .addColor(params, "color");
-// }
+var mean = 0;
+var mean_2 = -width;
+
+// Always positive wind, blowing left to right
+function updateWind() {
+    mean += speed;
+    if (mean > width * 1.5) mean = -0.5 * width;
+
+    mean_2 += speed;
+    if (mean_2 > width * 1.5) mean_2 = -0.5 * width;
+
+    for (i = 0; i < nodeCount; i++) {
+        // Wind is always positive
+        var baseWind = (0.5 + Math.random() * 0.5) * wind_strength;
+        wind[i] = baseWind;
+    }
+}
+
+function dist(x, y) { return Math.sqrt(x * x + y * y); }
+
+function resolve_constraints() {
+    for (var iter = 0; iter < iterations; iter++) {
+        for (var li = 0; li < links.length; li++) {
+            var first = nodes[links[li].first];
+            var second = nodes[links[li].second];
+            var dx_ = first.x - second.x;
+            var dy_ = first.y - second.y;
+            var d = Math.sqrt(dx_ * dx_ + dy_ * dy_);
+            if (d > max_dist) {
+                var diff = (max_dist - d) / d;
+                var tx = dx_ * 0.5 * diff;
+                var ty = dy_ * 0.5 * diff;
+
+                if (!first.static && links[li].first != active_node) {
+                    first.x += tx;
+                    first.y += ty;
+                }
+                if (!second.static && links[li].second != active_node) {
+                    second.x -= tx;
+                    second.y -= ty;
+                }
+            }
+        }
+    }
+}
+
+function moveCloth() {
+    updateWind();
+    for (i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (!n.static && i != active_node) {
+            var accX = wind[i];
+            var accY = gravity;
+            var x_vel = n.x - n.last_x + accX * dt;
+            var y_vel = n.y - n.last_y + accY * dt;
+            var next_x = n.x + x_vel;
+            var next_y = n.y + y_vel;
+
+            n.last_x = n.x;
+            n.last_y = n.y;
+            n.x = next_x;
+            n.y = next_y;
+
+            if (n.x < 10) n.x = 10;
+            if (n.y < 10) n.y = 10;
+            if (n.x > canvas.width - 10) n.x = canvas.width - 10;
+            if (n.y > canvas.height - 10) n.y = canvas.height - 10;
+        }
+    }
+}
+
+var active_node = -1;
+var mouse_pos_x, mouse_pos_y;
+var drag = false;
+
+// Mouse interaction
+canvas.addEventListener('mousemove', function(event) {
+    mouse_pos_x = event.clientX;
+    mouse_pos_y = event.clientY;
+    if (drag && active_node != -1) {
+        nodes[active_node].x = mouse_pos_x;
+        nodes[active_node].y = mouse_pos_y;
+        nodes[active_node].last_x = mouse_pos_x;
+        nodes[active_node].last_y = mouse_pos_y;
+    }
+});
+canvas.addEventListener('mousedown', function(event) {
+    drag = true;
+    mouse_pos_x = event.clientX;
+    mouse_pos_y = event.clientY;
+    active_node = -1;
+    for (var l = 0; l < nodes.length; l++) {
+        if (dist(mouse_pos_x - nodes[l].x, mouse_pos_y - nodes[l].y) < 20) {
+            active_node = l;
+            nodes[active_node].x = mouse_pos_x;
+            nodes[active_node].y = mouse_pos_y;
+            nodes[active_node].last_x = mouse_pos_x;
+            nodes[active_node].last_y = mouse_pos_y;
+            break;
+        }
+    }
+});
+canvas.addEventListener('mouseup', function(event) {
+    drag = false;
+    active_node = -1;
+});
+
+function drawTriangleWarp(ctx, image,
+    sx0, sy0, sx1, sy1, sx2, sy2,
+    dx0, dy0, dx1, dy1, dx2, dy2) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(dx0, dy0);
+    ctx.lineTo(dx1, dy1);
+    ctx.lineTo(dx2, dy2);
+    ctx.closePath();
+    ctx.clip();
+
+    var denom = (sx0 * (sy1 - sy2) + sx1 * (sy2 - sy0) + sx2 * (sy0 - sy1));
+    if (denom === 0) { ctx.restore(); return; }
+
+    var a = (dx0 * (sy1 - sy2) + dx1 * (sy2 - sy0) + dx2 * (sy0 - sy1)) / denom;
+    var b = (dy0 * (sy1 - sy2) + dy1 * (sy2 - sy0) + dy2 * (sy0 - sy1)) / denom;
+    var c = (dx0 * (sx2 - sx1) + dx1 * (sx0 - sx2) + dx2 * (sx1 - sx0)) / denom;
+    var d = (dy0 * (sx2 - sx1) + dy1 * (sx0 - sx2) + dy2 * (sx1 - sx0)) / denom;
+    var e = (dx0 * (sx1 * sy2 - sx2 * sy1) + dx1 * (sx2 * sy0 - sx0 * sy2) + dx2 * (sx0 * sy1 - sx1 * sy0)) / denom;
+    var f = (dy0 * (sx1 * sy2 - sx2 * sy1) + dy1 * (sx2 * sy0 - sx0 * sy2) + dy2 * (sx0 * sy1 - sx1 * sy0)) / denom;
+
+    ctx.transform(a, b, c, d, e, f);
+    ctx.drawImage(image, 0, 0);
+    ctx.restore();
+}
+
+function drawCloth() {
+    if (!img.complete || img.width === 0) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (var y = 0; y < height - 1; y++) {
+        for (var x = 0; x < width - 1; x++) {
+            var i0 = y * width + x;
+            var i1 = y * width + x + 1;
+            var i2 = (y + 1) * width + x;
+            var i3 = (y + 1) * width + x + 1;
+
+            var n0 = nodes[i0],
+                n1 = nodes[i1],
+                n2 = nodes[i2],
+                n3 = nodes[i3];
+            var uv0 = nodes_uv[i0],
+                uv1 = nodes_uv[i1],
+                uv2 = nodes_uv[i2],
+                uv3 = nodes_uv[i3];
+
+            var sx0 = uv0.u * img.width,
+                sy0 = uv0.v * img.height;
+            var sx1 = uv1.u * img.width,
+                sy1 = uv1.v * img.height;
+            var sx2 = uv2.u * img.width,
+                sy2 = uv2.v * img.height;
+            var sx3 = uv3.u * img.width,
+                sy3 = uv3.v * img.height;
+
+            drawTriangleWarp(ctx, img,
+                sx0, sy0, sx1, sy1, sx2, sy2,
+                n0.x, n0.y, n1.x, n1.y, n2.x, n2.y);
+            drawTriangleWarp(ctx, img,
+                sx2, sy2, sx1, sy1, sx3, sy3,
+                n2.x, n2.y, n1.x, n1.y, n3.x, n3.y);
+        }
+    }
+}
+
+function animate() {
+    resolve_constraints();
+    moveCloth();
+    drawCloth();
+    requestAnimationFrame(animate);
+}
+
+animate();
