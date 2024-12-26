@@ -104,8 +104,8 @@ p {
     /* Padding around text */
     opacity: 0;
     /* Initial opacity for animation */
-    animation: fade 7s infinite;
-    /* 6 texts * 1s each + 1s delay */
+    animation: fade 10.5s infinite;
+    /* 6 texts * 1.5s each + 1.5s delay */
 }
 
 
@@ -130,21 +130,21 @@ p {
 }
 
 .text:nth-child(2) {
-    animation-delay: 2s;
+    animation-delay: 1.5s;
 }
 
 .text:nth-child(3) {
-    animation-delay: 4s;
+    animation-delay: 3s;
 }
 
 .text:nth-child(4) {
-    animation-delay: 6s;
+    animation-delay: 4.5s;
 }
 
 .text:nth-child(5) {
-    animation-delay: 8s;
+    animation-delay: 6s;
 }
 
 .text:nth-child(6) {
-    animation-delay: 9s;
+    animation-delay: 7.5s;
 }
