@@ -10,10 +10,94 @@
     <title>grbpwr</title>
 </head>
 
+<!-- <style>
+    body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #000;
+        /* Black background */
+        font-family: Arial, sans-serif;
+        overflow: hidden;
+    }
+    
+    .text-container {
+        position: relative;
+        text-align: center;
+        font-size: 3rem;
+        /* Larger font size */
+        color: hotpink;
+        /* Text color set to hotpink */
+        text-transform: uppercase;
+        /* All text will appear in uppercase */
+        background: black;
+        /* Black background rectangle */
+        padding: 20px 50px;
+        /* Padding to create a rectangle behind the text */
+    }
+    
+    .text {
+        position: absolute;
+        opacity: 0;
+        animation: fade 7s infinite;
+        /* 6 texts * 1s each + 1s delay */
+    }
+    /* Fade animation */
+    
+    @keyframes fade {
+        0%,
+        16.66% {
+            opacity: 1;
+        }
+        16.67%,
+        100% {
+            opacity: 0;
+        }
+    }
+    /* Timing for each text */
+    
+    .text:nth-child(1) {
+        animation-delay: 0s;
+    }
+    
+    .text:nth-child(2) {
+        animation-delay: 1s;
+    }
+    
+    .text:nth-child(3) {
+        animation-delay: 2s;
+    }
+    
+    .text:nth-child(4) {
+        animation-delay: 3s;
+    }
+    
+    .text:nth-child(5) {
+        animation-delay: 4s;
+    }
+    
+    .text:nth-child(6) {
+        animation-delay: 5s;
+    }
+</style> -->
+
 <body>
     <canvas id="js-con"></canvas>
     <div class="l-btn">OK</div>
     <!-- <div class="l-debug"></div> -->
+
+    <body>
+        <div class="text-container">
+            <div class="text">GRBPWR PARTY</div>
+            <div class="text">PLACE: BAR «BABE»</div>
+            <div class="text">DATE: 04.01.2025</div>
+            <div class="text">SIMAK’S BIRTHDAY CELEBRATION</div>
+            <div class="text">MUSIC: SIMAK2K TRUENAZAR NAVALINA OLRENAY</div>
+            <div class="text">DOORS: 22:00</div>
+        </div>
+    </body>
     <script type="module" src="./src/main.ts"></script>
 </body>
 

@@ -43,7 +43,7 @@ void main(){
 
   vec3 p = position;
   
-  float rotationAngle = ang * info.x * 0.01;
+  float rotationAngle = ang * info.x * 0.001;
   
   // Define a default threshold value
   float threshold = 0.01;

@@ -1,6 +1,6 @@
-import { ScreenType } from './screenType';
-import { Conf } from './conf';
 import { Util } from '../libs/util';
+import { Conf } from './conf';
+import { ScreenType } from './screenType';
 
 export class Func {
   private static _instance: Func;

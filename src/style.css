@@ -1,64 +1,150 @@
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
+
 body {
-  background-color: #FFF;
-  font-family: 'Anton', sans-serif;
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #FFF;
+    /* White background */
+    font-family: 'Anton', sans-serif;
+    /* Custom font */
+    overflow: hidden;
 }
+
 canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  user-select: none;
-  background-color: #FFF;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    user-select: none;
+    background-color: #FFF;
+    /* White background */
 }
 
 .l-debug {
-  position: fixed;
-  top: 0;
-  left: 0;
-  background-color: #000;
-  color: #FFF;
-  font-size: 18px;
-  padding: 5px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background-color: #000;
+    /* Black background for debug */
+    color: #FFF;
+    /* White text color for debug */
+    font-size: 18px;
+    padding: 5px;
 }
 
 .l-btn {
-  position: fixed;
-  top: 20vw;
-  left: 20vw;
-  width: 10vw;
-  height: 10vw;
-  background-color: #FFF;
-  color: #000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+    position: fixed;
+    top: 20vw;
+    left: 20vw;
+    width: 10vw;
+    height: 10vw;
+    background-color: #FFF;
+    /* White button background */
+    color: #000;
+    /* Black button text */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .-none {
-  display: none;
+    display: none;
 }
 
 .js-height {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 10px;
-  height: 2000vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  padding: 4vw;
-  mix-blend-mode: difference;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 10px;
+    height: 2000vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    padding: 4vw;
+    mix-blend-mode: difference;
 }
+
 p {
-  color: #FFF;
-  font-size: 30vw;
-  letter-spacing: 0em;
+    color: #FFF;
+    /* White text for p */
+    font-size: 30vw;
+    /* Very large font size */
+    letter-spacing: 0em;
+}
+
+.text-container {
+    position: relative;
+    text-align: center;
+    font-size: 3rem;
+    /* Larger font size for text */
+    color: hotpink;
+    /* Text color set to hotpink */
+    text-transform: uppercase;
+    /* All text will appear in uppercase */
+}
+
+.text {
+    position: relative;
+    display: inline-block;
+    /* Ensures the black rectangle only covers the text */
+    background-color: black;
+    /* Black rectangle behind text */
+    color: rgb(255, 255, 255);
+    /* Text color */
+    padding: 10px 20px;
+    /* Padding around text */
+    opacity: 0;
+    /* Initial opacity for animation */
+    animation: fade 7s infinite;
+    /* 6 texts * 1s each + 1s delay */
+}
+
+
+/* Fade animation */
+
+@keyframes fade {
+    0%,
+    16.66% {
+        opacity: 1;
+    }
+    16.67%,
+    100% {
+        opacity: 0;
+    }
+}
+
+
+/* Timing for each text */
+
+.text:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.text:nth-child(2) {
+    animation-delay: 1s;
+}
+
+.text:nth-child(3) {
+    animation-delay: 2s;
+}
+
+.text:nth-child(4) {
+    animation-delay: 3s;
+}
+
+.text:nth-child(5) {
+    animation-delay: 4s;
+}
+
+.text:nth-child(6) {
+    animation-delay: 5s;
 }
