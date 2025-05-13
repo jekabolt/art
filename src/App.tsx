@@ -60,7 +60,15 @@ export default function App(): JSX.Element {
     // Save image
     const url = canvas.toDataURL('image/png');
     if (isIOS()) {
-      window.open(url, '_blank');
+      // Convert dataURL to Blob
+      fetch(url)
+        .then(res => res.blob())
+        .then(blob => {
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank');
+          // Optionally, revokeObjectURL after some time
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+        });
     } else {
       const a = document.createElement('a');
       a.href = url;
@@ -216,10 +224,8 @@ export default function App(): JSX.Element {
         <div
           style={{
             position: 'relative',
-            width: 640,
-            height: 480,
-            maxWidth: '100%',
-            maxHeight: '100%',
+            width: '100%',
+            maxWidth: 640,
             aspectRatio: '4 / 3',
             background: '#000',
             display: 'flex',
@@ -232,13 +238,11 @@ export default function App(): JSX.Element {
             style={{
               background: '#000',
               width: '100%',
-              height: 'auto',
+              aspectRatio: '4 / 3',
               border: 'none',
               outline: 'none',
               display: 'block',
-              aspectRatio: '4 / 3',
               maxWidth: 640,
-              maxHeight: 480,
             }}
             width={640}
             height={480}
