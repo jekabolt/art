@@ -16,6 +16,8 @@ export default function App(): JSX.Element {
   const direction = 'vertical'; // or 'horizontal'
   const speed = 1; // or your preferred default
 
+  // No dynamic canvas size; always 640x480
+
   // Save image handler
   const handleSave = () => {
     const canvas = canvasRef.current;
@@ -58,10 +60,8 @@ export default function App(): JSX.Element {
     // Save image
     const url = canvas.toDataURL('image/png');
     if (isIOS()) {
-      // Open in new tab for iOS users
       window.open(url, '_blank');
     } else {
-      // Download for others
       const a = document.createElement('a');
       a.href = url;
       a.download = 'slit-scan.png';
@@ -120,12 +120,6 @@ export default function App(): JSX.Element {
         return;
       }
       if (video.readyState < 2) {
-        animationRef.current = requestAnimationFrame(draw);
-        return;
-      }
-      // Speed control: only draw every Nth frame
-      frameCountRef.current = (frameCountRef.current || 0) + 1;
-      if (frameCountRef.current % speed !== 0) {
         animationRef.current = requestAnimationFrame(draw);
         return;
       }
@@ -199,19 +193,24 @@ export default function App(): JSX.Element {
   }, []);
 
   return (
-    <div style={{
+    <div className="app-root" style={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '100vh',
       minWidth: '100vw',
       background: '#000',
+      overflow: 'hidden',
     }}>
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          height: '100%',
+          boxSizing: 'border-box',
         }}
       >
         <div
@@ -219,24 +218,37 @@ export default function App(): JSX.Element {
             position: 'relative',
             width: 640,
             height: 480,
+            maxWidth: '100%',
+            maxHeight: '100%',
+            aspectRatio: '4 / 3',
+            background: '#000',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
         >
           <canvas
             ref={canvasRef}
             style={{
               background: '#000',
-              width: 640,
-              height: 480,
+              width: '100%',
+              height: 'auto',
               border: 'none',
               outline: 'none',
               display: 'block',
+              aspectRatio: '4 / 3',
+              maxWidth: 640,
+              maxHeight: 480,
             }}
+            width={640}
+            height={480}
           />
           <video ref={videoRef} style={{ display: 'none' }} playsInline muted />
         </div>
         <div
           style={{
             width: 640,
+            maxWidth: '100%',
             display: 'flex',
             justifyContent: 'flex-end',
             marginTop: 12,

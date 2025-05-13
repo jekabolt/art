@@ -9,7 +9,8 @@ body,
     height: 100vh;
     margin: 0;
     padding: 0;
-    overflow-x: hidden;
+    overflow: hidden !important;
+    position: fixed;
 }
 
 body {
@@ -63,6 +64,20 @@ body {
         font-size: 12.8px;
         /* 20% smaller than 16px */
     }
+    .container,
+    .video-container {
+        width: 100vw;
+        height: 100vh;
+        min-width: 100vw;
+        min-height: 100vh;
+        padding: 0;
+    }
+    .container video,
+    .video-container video {
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+    }
 }
 
 .underlined {
@@ -70,14 +85,19 @@ body {
 }
 
 .container {
+    width: 100vw;
+    height: 100vh;
+    min-height: 100vh;
+    min-width: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-    width: 100vw;
-    padding: 1rem;
+    padding: 0;
     box-sizing: border-box;
+    z-index: 0;
 }
 
 button,
@@ -86,4 +106,29 @@ input {
     min-width: 48px;
     min-height: 48px;
     margin: 0.5rem 0;
+}
+
+.video-container {
+    width: 100vw;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.video-container video {
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    display: block;
+}
+
+@media (max-width: 600px) {
+    .app-root {
+        padding-left: 12px;
+        padding-right: 12px;
+        box-sizing: border-box;
+    }
 }
