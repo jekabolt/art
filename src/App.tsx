@@ -149,7 +149,20 @@ export default function App(): JSX.Element {
         animationRef.current = requestAnimationFrame(draw);
         return;
       }
-      // Draw current frame to offscreen, mirrored horizontally
+      // Calculate source rectangle for 4:3 crop from video
+      const videoAspect = video.videoWidth / video.videoHeight;
+      const canvasAspect = width / height;
+      let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight;
+      if (videoAspect > canvasAspect) {
+        // Video is wider than canvas: crop sides
+        sw = video.videoHeight * canvasAspect;
+        sx = (video.videoWidth - sw) / 2;
+      } else if (videoAspect < canvasAspect) {
+        // Video is taller than canvas: crop top/bottom
+        sh = video.videoWidth / canvasAspect;
+        sy = (video.videoHeight - sh) / 2;
+      }
+      // Draw the cropped region to fill the canvas
       const offCtx = offscreen.getContext('2d');
       if (!offCtx) {
         animationRef.current = requestAnimationFrame(draw);
@@ -157,7 +170,7 @@ export default function App(): JSX.Element {
       }
       offCtx.save();
       offCtx.setTransform(-1, 0, 0, 1, width, 0);
-      offCtx.drawImage(video, 0, 0, width, height);
+      offCtx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
       offCtx.setTransform(1, 0, 0, 1, 0, 0);
       offCtx.restore();
       // Convert offscreen buffer to grayscale
