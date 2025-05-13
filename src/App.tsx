@@ -1,154 +1,268 @@
-import { memo, FC, useEffect, useRef, useState, useCallback } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Center, Float, useGLTF } from '@react-three/drei';
-import { PostProcessing } from './post-processing';
-import { EnvironmentWrapper } from './environment';
-import * as THREE from 'three';
-import { useControls, folder, Leva } from 'leva';
+import { useEffect, useRef } from 'react';
 import './styles.css';
 
-const DemoName: FC = () => (
-  <div className="demo-container">
-    <div className="demo-name">Dithering Shader</div>
-    <div className="demo-author">
-      made by <span className="underlined">
-        <a href="https://niccolofanton.dev" target="_blank" rel="noopener noreferrer">niccolofanton</a>
-      </span>
-      {" • "}
-      <a href="https://github.com/niccolofanton/dithering-shader" target="_blank" rel="noopener noreferrer" className="github-link">GitHub</a>
-    </div>
-  </div>
-);
-
-// Pre-loading the model to avoid blocking the main thread later
-useGLTF.preload('/jousting_helmet-transformed.glb');
-
-/**
- * Main application component
- */
 export default function App(): JSX.Element {
-  const { bgColor } = useControls({
-    'Scene Settings': folder({
-      bgColor: {
-        value: '#ffffff',
-        label: 'Background Color'
+  // Slit-scan effect refs
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const offscreenRef = useRef<HTMLCanvasElement | null>(null);
+  const sliceXRef = useRef(0);
+  const sliceYRef = useRef(0);
+  const animationRef = useRef<number>();
+  const frameCountRef = useRef(0);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+  const slitWidth = 2; // or your preferred default
+  const direction = 'vertical'; // or 'horizontal'
+  const speed = 1; // or your preferred default
+
+  // Save image handler
+  const handleSave = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Draw logo onto canvas
+    const logo = logoImgRef.current;
+    if (logo && logo.complete) {
+      const margin = 12;
+      let logoWidth = logo.naturalWidth;
+      let logoHeight = logo.naturalHeight;
+      const maxWidth = 120;
+      const maxHeight = 48;
+
+      // Scale logo to fit within max dimensions, preserving aspect ratio
+      if (logoWidth > maxWidth) {
+        const scale = maxWidth / logoWidth;
+        logoWidth = maxWidth;
+        logoHeight = logoHeight * scale;
       }
-    })
-  });
-
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const [modelScale, setModelScale] = useState(3);
-
-  const { intensity, highlight } = useControls({
-    'Environment Settings': folder({
-      intensity: {
-        value: 1.5,
-        min: 0,
-        max: 5,
-        step: 0.1,
-        label: 'Environment Intensity'
-      },
-      highlight: {
-        value: '#066aff',
-        label: 'Highlight Color'
+      if (logoHeight > maxHeight) {
+        const scale = maxHeight / logoHeight;
+        logoHeight = maxHeight;
+        logoWidth = logoWidth * scale;
       }
-    })
-  });
 
-  // Update renderer clear color when background color changes
-  useEffect(() => {
-    if (rendererRef.current) {
-      rendererRef.current.setClearColor(new THREE.Color(bgColor));
+      ctx.save();
+      ctx.drawImage(
+        logo,
+        canvas.width - logoWidth - margin,
+        canvas.height - logoHeight - margin,
+        logoWidth,
+        logoHeight
+      );
+      ctx.restore();
     }
-  }, [bgColor]);
 
-  // Responsive adjustment handler for model scale
-  const handleResize = useCallback(() => {
-    const isSmallScreen = window.innerWidth <= 768;
-    setModelScale(isSmallScreen ? 2.4 : 3); // 20% reduction on small screens
+    // Save image
+    const url = canvas.toDataURL('image/png');
+    if (isIOS()) {
+      // Open in new tab for iOS users
+      window.open(url, '_blank');
+    } else {
+      // Download for others
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'slit-scan.png';
+      a.click();
+    }
+  };
+
+  useEffect(() => {
+    // Get webcam
+    const video = videoRef.current;
+    if (!video) return;
+    let stream: MediaStream;
+    let running = true;
+
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(s => {
+        stream = s;
+        video.srcObject = stream;
+        video.play();
+      })
+      .catch(err => {
+        console.error('Webcam error:', err);
+      });
+
+    return () => {
+      running = false;
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
   }, []);
 
-  // Set up resize handling
   useEffect(() => {
-    // Initial check
-    handleResize();
-    
-    // Add listener
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [handleResize]);
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Offscreen buffer for current video frame
+    let offscreen = offscreenRef.current;
+    if (!offscreen) {
+      offscreen = document.createElement('canvas');
+      offscreenRef.current = offscreen;
+    }
+    const width = 640, height = 480;
+    canvas.width = width;
+    canvas.height = height;
+    offscreen.width = width;
+    offscreen.height = height;
+    sliceXRef.current = 0;
+    sliceYRef.current = 0;
+    frameCountRef.current = 0;
+
+    function draw() {
+      if (!video || !offscreen || !ctx) {
+        animationRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      if (video.readyState < 2) {
+        animationRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      // Speed control: only draw every Nth frame
+      frameCountRef.current = (frameCountRef.current || 0) + 1;
+      if (frameCountRef.current % speed !== 0) {
+        animationRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      // Draw current frame to offscreen, mirrored horizontally
+      const offCtx = offscreen.getContext('2d');
+      if (!offCtx) {
+        animationRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      offCtx.save();
+      offCtx.setTransform(-1, 0, 0, 1, width, 0);
+      offCtx.drawImage(video, 0, 0, width, height);
+      offCtx.setTransform(1, 0, 0, 1, 0, 0);
+      offCtx.restore();
+      // Convert offscreen buffer to grayscale
+      const imgData = offCtx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+      const contrast = 2.0; // 2.0 = strong contrast
+      for (let i = 0; i < data.length; i += 4) {
+        // Luminance formula: 0.299*R + 0.587*G + 0.114*B
+        const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        // Apply contrast
+        const contrasted = Math.max(0, Math.min(255, (lum - 128) * contrast + 128));
+        data[i] = data[i + 1] = data[i + 2] = contrasted;
+      }
+      offCtx.putImageData(imgData, 0, 0);
+      const percent = 0.2; // 20% for live
+      if (direction === 'vertical') {
+        const liveLimit = Math.floor(width * percent);
+        // Draw live video on the leftmost 10% from offscreen buffer
+        ctx.drawImage(offscreen, 0, 0, liveLimit, height, 0, 0, liveLimit, height);
+        // Shift effect region right by 1px
+        if (canvas) {
+          ctx.drawImage(
+            canvas,
+            liveLimit, 0, width - liveLimit - 1, height, // src
+            liveLimit + 1, 0, width - liveLimit - 1, height // dest
+          );
+        }
+        // Copy last column of live region to first column of effect region
+        const col = ctx.getImageData(liveLimit - 1, 0, 1, height);
+        ctx.putImageData(col, liveLimit, 0);
+      } else {
+        const liveLimit = Math.floor(height * percent);
+        // Draw live video on the top 10% from offscreen buffer
+        ctx.drawImage(offscreen, 0, 0, width, liveLimit, 0, 0, width, liveLimit);
+        // Shift effect region down by 1px
+        if (canvas) {
+          ctx.drawImage(
+            canvas,
+            0, liveLimit, width, height - liveLimit - 1, // src
+            0, liveLimit + 1, width, height - liveLimit - 1 // dest
+          );
+        }
+        // Copy last row of live region to first row of effect region
+        const row = ctx.getImageData(0, liveLimit - 1, width, 1);
+        ctx.putImageData(row, 0, liveLimit);
+      }
+      animationRef.current = requestAnimationFrame(draw);
+    }
+    animationRef.current = requestAnimationFrame(draw);
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [slitWidth, direction, speed]);
+
+  useEffect(() => {
+    const img = new window.Image();
+    img.src = '/logo-50k.jpg';
+    logoImgRef.current = img;
+  }, []);
 
   return (
-    <>
-      <Leva collapsed hidden={false} />
-      <Canvas 
-        shadows 
-        camera={{ position: [0, -1, 4], fov: 65 }}
-        gl={{ 
-          alpha: false 
-        }}
-        onCreated={({ gl }) => {
-          rendererRef.current = gl;
-          gl.setClearColor(new THREE.Color(bgColor));
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      minWidth: '100vw',
+      background: '#000',
+    }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
         }}
       >
-        <group position={[0, -0.5, 0]}>
-          <Float 
-            floatIntensity={2} 
-            rotationIntensity={1}
-            speed={2}
-          >
-            <Center scale={modelScale} position={[0, .8, 0]} rotation={[0, -Math.PI / 3.5, -0.4]}>
-              <Helmet />
-            </Center>
-          </Float>
-        </group>
-        <OrbitControls />
-        <EnvironmentWrapper intensity={intensity} highlight={highlight} />
-        <Effects />
-      </Canvas>
-      <DemoName />
-    </>
-  )
+        <div
+          style={{
+            position: 'relative',
+            width: 640,
+            height: 480,
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            style={{
+              background: '#000',
+              width: 640,
+              height: 480,
+              border: 'none',
+              outline: 'none',
+              display: 'block',
+            }}
+          />
+          <video ref={videoRef} style={{ display: 'none' }} playsInline muted />
+        </div>
+        <div
+          style={{
+            width: 640,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginTop: 12,
+          }}
+        >
+          <img
+            src="/logo-50k.jpg"
+            alt="Save"
+            onClick={handleSave}
+            style={{
+              cursor: 'pointer',
+              maxWidth: 120,
+              maxHeight: 48,
+              objectFit: 'contain',
+              borderRadius: 6,
+              boxShadow: '0 2px 8px #000a',
+              background: '#fff',
+              display: 'block',
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
-/**
- * Post-processing effects wrapper component
- * Memoized to prevent unnecessary re-renders
- */
-const Effects: FC = memo(() => (
-  <PostProcessing />
-))
-
-/*
-Auto-generated by: https://github.com/pmndrs/gltfjsx
-Command: npx gltfjsx@6.5.3 jousting_helmet.glb --transform --resolution=4098 
-Files: jousting_helmet.glb [45.8MB] > jousting_helmet-transformed.glb [3.99MB] (91%)
-Author: The Royal Armoury (Livrustkammaren) (https://sketchfab.com/TheRoyalArmoury)
-License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
-Source: https://sketchfab.com/3d-models/jousting-helmet-a4eea31d9d9441af9434a7da5ae46b54
-Title: Jousting Helmet
-*/
-interface HelmetProps {
-  [key: string]: any;
-}
-
-/**
- * 3D Helmet model component 
- */
-function Helmet(props: HelmetProps): JSX.Element {
-  const { nodes, materials } = useGLTF('/jousting_helmet-transformed.glb') as any;
-  return (
-    <group {...props} dispose={null}>
-      <mesh
-        castShadow
-        geometry={nodes.Object_2.geometry}
-        material={materials.model_Material_u1_v1}
-        material-roughness={0.15}
-        position={[-2.016, -0.06, 1.381]}
-        rotation={[-1.601, 0.068, 2.296]}
-        scale={0.038}
-      />
-    </group>
-  )
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
 } 
