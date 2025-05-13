@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './styles.css';
 
 export default function App(): JSX.Element {
@@ -17,6 +17,8 @@ export default function App(): JSX.Element {
   const speed = 1; // or your preferred default
 
   // No dynamic canvas size; always 640x480
+  const [overlayUrl, setOverlayUrl] = useState<string | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Save image handler
   const handleSave = () => {
@@ -59,22 +61,36 @@ export default function App(): JSX.Element {
 
     // Save image
     const url = canvas.toDataURL('image/png');
-    if (isIOS()) {
-      // Convert dataURL to Blob
-      fetch(url)
-        .then(res => res.blob())
-        .then(blob => {
-          const blobUrl = URL.createObjectURL(blob);
-          window.open(blobUrl, '_blank');
-          // Optionally, revokeObjectURL after some time
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-        });
+    if (isIOS() || window.innerWidth <= 600) {
+      // On mobile: overlay and stop video
+      setOverlayUrl(url);
+      // Stop video stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
     } else {
       const a = document.createElement('a');
       a.href = url;
       a.download = 'slit-scan.png';
       a.click();
     }
+  };
+
+  // Dismiss overlay and restart video
+  const handleOverlayDismiss = () => {
+    setOverlayUrl(null);
+    // Restart video stream
+    if (!videoRef.current) return;
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(s => {
+        streamRef.current = s;
+        videoRef.current!.srcObject = s;
+        videoRef.current!.play();
+      })
+      .catch(err => {
+        console.error('Webcam error:', err);
+      });
   };
 
   useEffect(() => {
@@ -87,6 +103,7 @@ export default function App(): JSX.Element {
     navigator.mediaDevices.getUserMedia({ video: true })
       .then(s => {
         stream = s;
+        streamRef.current = s;
         video.srcObject = stream;
         video.play();
       })
@@ -97,6 +114,7 @@ export default function App(): JSX.Element {
     return () => {
       running = false;
       if (stream) stream.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     };
   }, []);
 
@@ -248,6 +266,41 @@ export default function App(): JSX.Element {
             height={480}
           />
           <video ref={videoRef} style={{ display: 'none' }} playsInline muted />
+          {overlayUrl && (
+            <div
+              onClick={handleOverlayDismiss}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                aspectRatio: '4 / 3',
+                maxWidth: 640,
+                height: 'auto',
+                background: 'rgba(0,0,0,0.7)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10,
+                cursor: 'pointer',
+              }}
+            >
+              <img
+                src={overlayUrl}
+                alt="Saved PNG"
+                style={{
+                  width: '100%',
+                  height: 'auto',
+                  borderRadius: 8,
+                  boxShadow: '0 2px 16px #000a',
+                  background: '#fff',
+                  display: 'block',
+                  aspectRatio: '4 / 3',
+                  maxWidth: 640,
+                }}
+              />
+            </div>
+          )}
         </div>
         <div
           style={{
