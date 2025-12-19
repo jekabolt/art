@@ -6,7 +6,20 @@ export class Func {
   private static _instance: Func;
   private _useFullScreen: boolean = Util.instance.isSp() || Util.instance.isIPad();
 
-  constructor() {}
+  constructor() { }
+
+  /**
+   * Detects if the code is running inside an iframe
+   * @returns true if running in iframe context
+   */
+  private _isInIframe(): boolean {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      // If we can't access window.top due to cross-origin restrictions, assume iframe
+      return true;
+    }
+  }
 
   public static get instance(): Func {
     if (!this._instance) {
@@ -32,6 +45,11 @@ export class Func {
   }
 
   public sh(): number {
+    // Always use window.innerHeight in iframe context (screen.height doesn't work correctly in iframes)
+    if (this._isInIframe()) {
+      return window.innerHeight;
+    }
+
     if (this._useFullScreen) {
       return screen.height;
     } else {
@@ -72,16 +90,16 @@ export class Func {
     return (val / base) * this.sw();
   }
 
-  public sin1(radian:number):number {
+  public sin1(radian: number): number {
     return Math.sin(radian) + Math.sin(2 * radian)
   }
 
-  public sin2(radian:number):number {
-      return (
-          Math.sin(radian) +
-          Math.sin(2.2 * radian + 5.52) +
-          Math.sin(2.9 * radian + 0.93) +
-          Math.sin(4.6 * radian + 8.94)
-        ) / 4
+  public sin2(radian: number): number {
+    return (
+      Math.sin(radian) +
+      Math.sin(2.2 * radian + 5.52) +
+      Math.sin(2.9 * radian + 0.93) +
+      Math.sin(4.6 * radian + 8.94)
+    ) / 4
   }
 }

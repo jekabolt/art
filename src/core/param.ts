@@ -1,8 +1,8 @@
 import GUI from 'lil-gui';
 import Stats from 'three/examples/jsm/libs/stats.module';
-import { Conf } from './conf';
-import { Update } from '../libs/update';
 import { FPS } from '../core/fps';
+import { Update } from '../libs/update';
+import { Conf } from './conf';
 
 export class Param {
   private static _instance: Param;
@@ -14,7 +14,7 @@ export class Param {
   private _stats: any;
 
   public main = {
-    bgColor:{value:0xf0f0f0, type:'color'},
+    bgColor: { value: 0x0f0f0f, type: 'color' },
   }
 
   constructor() {

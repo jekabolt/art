@@ -3,7 +3,7 @@ import path from 'path'
 import { defineConfig } from 'vite'
 import glsl from 'vite-plugin-glsl'
 
-const dist = path.join(__dirname, '.', 'docs')
+const dist = path.join(__dirname, '.', 'dist')
 
 // https://vitejs.dev/config/
 export default defineConfig({
