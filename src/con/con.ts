@@ -23,8 +23,8 @@ export class Con extends Canvas {
   private _color: Array<Color> = [];
   private _imgSize: number = 512;
   private _sample: Array<any> = [];
-  private _currentImageIndex: number = 1; // 0-4 for sample-0.png through sample-4.png
-  private _maxImageIndex: number = 4; // Maximum image index (sample-4.png)
+  private _currentImageIndex: number = 1; // 0-3 for sample-0.png through sample-3.png
+  private _maxImageIndex: number = 3; // Maximum image index (sample-3.png)
   private _clickTimes: number[] = []; // Track click timestamps for triple-click detection
   private _tripleClickDelay: number = 400; // Milliseconds between clicks for triple-click
   private _oldAng: number = -1;
@@ -126,6 +126,29 @@ export class Con extends Canvas {
           }
 
           Param.instance.debug.innerHTML = 'swipe H: ' + Math.round(this._val) + '° (total: ' + Math.round(this._totalRotation) + '°)'
+        }
+
+        // Handle vertical swipes (rotation with wrap effect)
+        // Top to bottom (positive deltaY) = right to left (negative rotation)
+        // Bottom to top (negative deltaY) = left to right (positive rotation)
+        if (absDeltaY > absDeltaX && absDeltaY > 0) {
+          // Convert incremental movement to rotation (inverted for vertical)
+          let rotationDelta = -deltaY * this._swipeSensitivity
+
+          // Clamp rotation delta to prevent sudden jumps
+          rotationDelta = Math.max(-this._maxRotationPerFrame, Math.min(this._maxRotationPerFrame, rotationDelta))
+
+          // Update total rotation (can be negative or positive)
+          this._totalRotation += rotationDelta
+
+          // Calculate wrapped angle from total rotation
+          this._val = ((this._totalRotation % 360) + 360) % 360
+
+          if (this._oldAng === -1) {
+            this._oldAng = this._val
+          }
+
+          Param.instance.debug.innerHTML = 'swipe V: ' + Math.round(this._val) + '° (total: ' + Math.round(this._totalRotation) + '°)'
         }
 
         this._lastInteractionTime = Date.now() // Reset interaction timer
@@ -240,6 +263,57 @@ export class Con extends Canvas {
           }
 
           Param.instance.debug.innerHTML = 'drag H: ' + Math.round(this._val) + '° (total: ' + Math.round(this._totalRotation) + '°)'
+        }
+
+        // Handle vertical swipes (rotation with wrap effect)
+        // Top to bottom (positive deltaY) = right to left (negative rotation)
+        // Bottom to top (negative deltaY) = left to right (positive rotation)
+        if (absDeltaY > absDeltaX && absDeltaY > 0) {
+          // On first move, if delta is too large, reset tracking to prevent jumps
+          if (isFirstMouseMove) {
+            if (Math.abs(deltaY) > 20) {
+              // Large initial jump, reset tracking
+              lastMouseX = mouseX
+              lastMouseY = mouseY
+              isFirstMouseMove = false
+              return
+            }
+            isFirstMouseMove = false
+          }
+
+          // Convert incremental movement to rotation (inverted for vertical)
+          let rotationDelta = -deltaY * this._swipeSensitivity
+
+          // Additional check: if delta is suspiciously large, reset last position to prevent jumps
+          if (Math.abs(deltaY) > 30) {
+            // Large jump detected, reset tracking to current position
+            lastMouseX = mouseX
+            lastMouseY = mouseY
+            return
+          }
+
+          // Clamp rotation delta to prevent sudden jumps (more restrictive for desktop)
+          rotationDelta = Math.max(-this._maxRotationPerFrame, Math.min(this._maxRotationPerFrame, rotationDelta))
+
+          // Only apply rotation if delta is meaningful (prevent micro-movements from accumulating)
+          if (Math.abs(rotationDelta) < 0.05) {
+            // Update position but don't apply rotation for very small movements
+            lastMouseX = mouseX
+            lastMouseY = mouseY
+            return
+          }
+
+          // Update total rotation (can be negative or positive)
+          this._totalRotation += rotationDelta
+
+          // Calculate wrapped angle from total rotation
+          this._val = ((this._totalRotation % 360) + 360) % 360
+
+          if (this._oldAng === -1) {
+            this._oldAng = this._val
+          }
+
+          Param.instance.debug.innerHTML = 'drag V: ' + Math.round(this._val) + '° (total: ' + Math.round(this._totalRotation) + '°)'
         }
 
         this._lastInteractionTime = Date.now() // Reset interaction timer
@@ -362,7 +436,7 @@ export class Con extends Canvas {
       // Select random image (excluding current one)
       let newImageIndex: number
       do {
-        newImageIndex = Math.floor(Util.instance.random(0, this._maxImageIndex + 1))
+        newImageIndex = Math.floor(Util.instance.random(0, this._maxImageIndex + 1)) // 0-3 inclusive
       } while (newImageIndex === this._currentImageIndex && this._maxImageIndex > 0) // Only loop if there are other images available
 
       this._currentImageIndex = newImageIndex
