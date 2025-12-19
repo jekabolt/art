@@ -23,8 +23,8 @@ export class Con extends Canvas {
   private _color: Array<Color> = [];
   private _imgSize: number = 512;
   private _sample: Array<any> = [];
-  private _currentImageIndex: number = 1; // 0-3 for sample-0.png through sample-3.png
-  private _maxImageIndex: number = 3; // Maximum image index (sample-3.png)
+  private _currentImageIndex: number = 1; // 0-4 for sample-0.png through sample-4.png
+  private _maxImageIndex: number = 4; // Maximum image index (sample-4.png)
   private _clickTimes: number[] = []; // Track click timestamps for triple-click detection
   private _tripleClickDelay: number = 400; // Milliseconds between clicks for triple-click
   private _oldAng: number = -1;
@@ -436,7 +436,7 @@ export class Con extends Canvas {
       // Select random image (excluding current one)
       let newImageIndex: number
       do {
-        newImageIndex = Math.floor(Util.instance.random(0, this._maxImageIndex + 1)) // 0-3 inclusive
+        newImageIndex = Math.floor(Util.instance.random(0, this._maxImageIndex + 1)) // 0-4 inclusive
       } while (newImageIndex === this._currentImageIndex && this._maxImageIndex > 0) // Only loop if there are other images available
 
       this._currentImageIndex = newImageIndex
