@@ -43,6 +43,13 @@ export class Con extends Canvas {
   constructor(opt: any) {
     super(opt);
 
+    // Check if we're on the /invert path - use sample-0.png as default
+    const pathname = window.location.pathname
+    const isInvertPath = pathname === '/invert' || pathname.startsWith('/invert/')
+    if (isInvertPath) {
+      this._currentImageIndex = 0 // Use sample-0.png for invert path
+    }
+
     for (let i = 0; i < 10; i++) {
       this._color.push(new Color(Util.instance.random(0, 1), Util.instance.random(0, 1), Util.instance.random(0, 1)))
     }
@@ -512,7 +519,10 @@ export class Con extends Canvas {
   }
 
   private _render(): void {
-    const bgColor = 0xffffff
+    // Check if we're on the /invert path for black background
+    const pathname = window.location.pathname
+    const isInvertPath = pathname === '/invert' || pathname.startsWith('/invert/')
+    const bgColor = isInvertPath ? 0x000000 : 0xffffff
     this.renderer.setClearColor(bgColor, 1)
     this.renderer.render(this.mainScene, this.camera)
   }

@@ -18,5 +18,9 @@ export default defineConfig({
   },
   build: {
     outDir: dist
+  },
+  // Handle client-side routing - serve index.html for all routes
+  preview: {
+    port: 4173,
   }
 })

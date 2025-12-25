@@ -17,6 +17,11 @@ body {
     overflow: hidden;
 }
 
+body.invert,
+body.invert canvas {
+    background-color: #000 !important;
+}
+
 canvas {
     position: fixed;
     top: 0;
