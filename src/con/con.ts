@@ -20,7 +20,6 @@ export class Con extends Canvas {
   private _ang: number = 0;
   private _val: number = 0;
   private _totalRotation: number = 0; // Total rotation angle (can be negative or positive)
-  private _color: Array<Color> = [];
   private _imgSize: number = 512;
   private _sample: Array<any> = [];
   private _currentImageIndex: number = 1; // 0-4 for sample-0.png through sample-4.png
@@ -39,6 +38,7 @@ export class Con extends Canvas {
   private _lastInteractionTime: number = 0; // Timestamp of last user interaction
   private _autoReturnDelay: number = 3000; // Milliseconds before auto-return starts
   private _autoReturnSpeed: number = 0.05; // Speed of auto-return (lerp factor)
+  private _needsRender: boolean = true; // Render-on-demand flag: only draw when the scene actually changes
 
   constructor(opt: any) {
     super(opt);
@@ -49,11 +49,6 @@ export class Con extends Canvas {
     if (isInvertPath) {
       this._currentImageIndex = 0 // Use sample-0.png for invert path
     }
-
-    for (let i = 0; i < 10; i++) {
-      this._color.push(new Color(Util.instance.random(0, 1), Util.instance.random(0, 1), Util.instance.random(0, 1)))
-    }
-    this._color[0] = new Color(1 - this._color[1].r, 1 - this._color[1].g, 1 - this._color[1].b)
 
     this._con = new Object3D()
     this.mainScene.add(this._con)
@@ -159,6 +154,7 @@ export class Con extends Canvas {
         }
 
         this._lastInteractionTime = Date.now() // Reset interaction timer
+        this._needsRender = true // swipe changed the rotation → redraw
 
         // Update last touch position for next incremental update
         this._lastTouchX = touchX
@@ -324,6 +320,7 @@ export class Con extends Canvas {
         }
 
         this._lastInteractionTime = Date.now() // Reset interaction timer
+        this._needsRender = true // drag changed the rotation → redraw
 
         // Update last mouse position for next incremental update (always update to prevent accumulation)
         lastMouseX = mouseX
@@ -380,9 +377,12 @@ export class Con extends Canvas {
     // Clear previous data
     this._sample = []
 
-    // Remove old mesh if it exists
+    // Remove old mesh if it exists, and free its GPU resources to avoid a
+    // video-memory leak when switching images repeatedly (triple-click).
     if (this._mesh) {
       this._con.remove(this._mesh)
+      this._mesh.geometry.dispose()
+      ;(this._mesh.material as RawShaderMaterial).dispose()
       this._mesh = undefined
     }
 
@@ -463,41 +463,27 @@ export class Con extends Canvas {
         transparent: true,
         depthTest: false,
         uniforms: {
-          alpha: { value: 0 },
-          size: { value: 2 },
-          time: { value: 0 },
+          size: { value: 5 },
           ang: { value: 0 },
         }
       })
     )
     this._con.add(this._mesh)
+    this._needsRender = true // new geometry → draw next frame
   }
 
   protected _update(): void {
     super._update()
     this._con.position.y = Func.instance.screenOffsetY() * -1
 
-    // Disabled auto-rotation - rotation only happens via user input
-    // if (Conf.instance.FLG_TEST) {
-    //   // Test mode - auto rotate
-    //   this._oldAng = this._val
-    //   this._totalRotation += 2
-    //   // Calculate wrapped angle and rotation count from total rotation
-    //   this._val = ((this._totalRotation % 360) + 360) % 360
-    //   this._rotCnt = Math.floor(this._totalRotation / 360)
-    // } else {
-    if (true) {
-      // Auto-return to initial state after inactivity
-      const currentTime = Date.now()
-      const timeSinceLastInteraction = currentTime - this._lastInteractionTime
-
-      if (timeSinceLastInteraction > this._autoReturnDelay) {
-        // Smoothly return rotation to 0
-        if (Math.abs(this._totalRotation) > 0.1) {
-          this._totalRotation += (0 - this._totalRotation) * this._autoReturnSpeed
-          // Calculate wrapped angle from total rotation
-          this._val = ((this._totalRotation % 360) + 360) % 360
-        }
+    // Auto-return to initial state after inactivity
+    const timeSinceLastInteraction = Date.now() - this._lastInteractionTime
+    if (timeSinceLastInteraction > this._autoReturnDelay) {
+      // Smoothly return rotation to 0
+      if (Math.abs(this._totalRotation) > 0.1) {
+        this._totalRotation += (0 - this._totalRotation) * this._autoReturnSpeed
+        this._val = ((this._totalRotation % 360) + 360) % 360
+        this._needsRender = true // auto-return is still moving the scene
       }
     }
 
@@ -505,16 +491,19 @@ export class Con extends Canvas {
       const s = Func.instance.r(3)
       this._mesh.scale.set(s, s, 1)
 
-      this._setUni(this._mesh, 'size', 5)
-
-      // Use total rotation directly (already includes full rotations)
-      const ang = this._totalRotation;
-      this._ang += (ang - this._ang) * 0.1
+      // Lerp the displayed angle toward the target; keep rendering until it settles
+      const prevAng = this._ang
+      this._ang += (this._totalRotation - this._ang) * 0.1
+      if (Math.abs(this._ang - prevAng) > 0.0001) {
+        this._needsRender = true
+      }
       this._setUni(this._mesh, 'ang', Util.instance.radian(this._ang))
     }
 
-    if (this.isNowRenderFrame()) {
+    // Render on demand: skip drawing the whole point cloud when nothing changed
+    if (this._needsRender) {
       this._render()
+      this._needsRender = false
     }
   }
 
@@ -548,7 +537,9 @@ export class Con extends Canvas {
 
     this.updateCamera(this.camera, w, h);
 
-    let pixelRatio: number = window.devicePixelRatio || 1;
+    // Clamp DPR: on 3x phones an unclamped ratio renders ~9x the pixels for a
+    // visually indistinguishable result. Cap at 2 to cut fragment work ~2x.
+    let pixelRatio: number = Math.min(window.devicePixelRatio || 1, 2);
 
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(w, h);
