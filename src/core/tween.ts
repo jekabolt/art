@@ -1,4 +1,4 @@
-import { Power0, gsap } from 'gsap';
+import { Power0, gsap } from 'gsap/gsap-core';
 
 export class Tween {
   private static _instance: Tween;

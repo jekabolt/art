@@ -32,7 +32,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: dist
+    outDir: dist,
+    target: 'es2020',
   },
   // Handle client-side routing - serve index.html for all routes
   preview: {

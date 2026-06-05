@@ -1,4 +1,4 @@
-import { Color } from 'three';
+import { Color } from 'three/src/math/Color';
 import { BufferAttribute } from 'three/src/core/BufferAttribute';
 import { BufferGeometry } from 'three/src/core/BufferGeometry';
 import { Object3D } from 'three/src/core/Object3D';
@@ -22,8 +22,17 @@ export class Con extends Canvas {
   private _totalRotation: number = 0; // Total rotation angle (can be negative or positive)
   private _imgSize: number = 512;
   private _sample: Array<any> = [];
-  private _currentImageIndex: number = 1; // 0-4 for sample-0.png through sample-4.png
-  private _maxImageIndex: number = 4; // Maximum image index (sample-4.png)
+  // Every logo variant shares one identical brush mask (alpha) — only the tint
+  // differs. We store a single mask (logo.webp) and colour the particles here,
+  // instead of shipping a near-duplicate image per colour. Colours sampled from
+  // the original sample-{1,0,3,4}.webp so the look is unchanged.
+  private _palette: Color[] = [
+    new Color(0x090909), // 0: black (default, was sample-1)
+    new Color(0xf6f6f6), // 1: white (was sample-0, used on /invert)
+    new Color(0xfc0303), // 2: red   (was sample-3)
+    new Color(0x3522f0), // 3: blue  (was sample-4)
+  ];
+  private _colorIndex: number = 0; // black by default
   private _clickTimes: number[] = []; // Track click timestamps for triple-click detection
   private _tripleClickDelay: number = 400; // Milliseconds between clicks for triple-click
   private _oldAng: number = -1;
@@ -43,11 +52,11 @@ export class Con extends Canvas {
   constructor(opt: any) {
     super(opt);
 
-    // Check if we're on the /invert path - use sample-0.png as default
+    // On the /invert path the background is black, so use the white logo.
     const pathname = window.location.pathname
     const isInvertPath = pathname === '/invert' || pathname.startsWith('/invert/')
     if (isInvertPath) {
-      this._currentImageIndex = 0 // Use sample-0.png for invert path
+      this._colorIndex = 1 // white
     }
 
     this._con = new Object3D()
@@ -373,12 +382,12 @@ export class Con extends Canvas {
     })
   }
 
-  private _loadImg(imageIndex?: number): void {
+  private _loadImg(): void {
     // Clear previous data
     this._sample = []
 
     // Remove old mesh if it exists, and free its GPU resources to avoid a
-    // video-memory leak when switching images repeatedly (triple-click).
+    // video-memory leak when switching colours repeatedly (triple-click).
     if (this._mesh) {
       this._con.remove(this._mesh)
       this._mesh.geometry.dispose()
@@ -386,13 +395,10 @@ export class Con extends Canvas {
       this._mesh = undefined
     }
 
-    // Use provided index or current index
-    if (imageIndex !== undefined) {
-      this._currentImageIndex = imageIndex
-    }
+    const tint = this._palette[this._colorIndex]
 
     const img = new Image();
-    img.src = Conf.instance.PATH_IMG + `sample-${this._currentImageIndex}.png`
+    img.src = Conf.instance.PATH_IMG + 'logo.webp'
 
     img.onload = () => {
       const cvs: any = document.createElement('canvas');
@@ -407,15 +413,12 @@ export class Con extends Canvas {
         const key = ~~(i / 4)
         const ix = ~~(key % cvs.width)
         const iy = ~~(key / cvs.width)
-        const r = data[i + 0] // 0 ~ 255
-        const g = data[i + 1] // 0 ~ 255
-        const b = data[i + 2] // 0 ~ 255
         const a = data[i + 3] // 0 ~ 255
 
         const kake = 1
         if (a > 0) {
           this._sample.push({
-            color: new Color(r / 255, g / 255, b / 255),
+            color: tint,
             pos: new Vector3(
               (ix - this._imgSize * 0.5) * kake,
               ((iy - this._imgSize * 0.5) * -1) * kake,
@@ -440,17 +443,17 @@ export class Con extends Canvas {
 
     // Check if we have 3 clicks within the delay window
     if (this._clickTimes.length >= 3) {
-      // Select random image (excluding current one)
-      let newImageIndex: number
+      // Switch to a random colour (excluding the current one)
+      let next: number
       do {
-        newImageIndex = Math.floor(Util.instance.random(0, this._maxImageIndex + 1)) // 0-4 inclusive
-      } while (newImageIndex === this._currentImageIndex && this._maxImageIndex > 0) // Only loop if there are other images available
+        next = Math.floor(Util.instance.random(0, this._palette.length))
+      } while (next === this._colorIndex && this._palette.length > 1)
 
-      this._currentImageIndex = newImageIndex
+      this._colorIndex = next
       this._loadImg()
       this._clickTimes = [] // Reset click counter
 
-      Param.instance.debug.innerHTML = `Switched to sample-${this._currentImageIndex}.png`
+      Param.instance.debug.innerHTML = `Switched to colour ${this._colorIndex}`
     }
   }
 

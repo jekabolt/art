@@ -1,5 +1,3 @@
-import GUI from 'lil-gui';
-import Stats from 'three/examples/jsm/libs/stats.module';
 import { FPS } from '../core/fps';
 import { Update } from '../libs/update';
 import { Conf } from './conf';
@@ -23,8 +21,10 @@ export class Param {
     }
 
     if (Conf.instance.FLG_STATS) {
-      this._stats = Stats();
-      document.body.appendChild(this._stats.domElement);
+      import('three/examples/jsm/libs/stats.module').then(({ default: Stats }) => {
+        this._stats = Stats();
+        document.body.appendChild(this._stats.domElement);
+      });
     }
 
     Update.instance.add(() => {
@@ -48,8 +48,10 @@ export class Param {
   public makeParamGUI(): void {
     if (this._dat != undefined) return;
 
-    this._dat = new GUI();
-    this._add(this.main, 'main');
+    import('lil-gui').then(({ default: GUI }) => {
+      this._dat = new GUI();
+      this._add(this.main, 'main');
+    });
   }
 
   private _add(obj: any, folderName: string): void {
