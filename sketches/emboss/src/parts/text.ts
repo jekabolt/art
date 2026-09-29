@@ -15,6 +15,8 @@ import { Util } from '../libs/util';
 /** Plane size per pixel of the wanted mark width, measured at rest (front layer + relief). */
 const FIT_LG = 3.95;
 const FIT_XS = 3.68;
+/** Mark width on a phone, share of the screen width (a bit smaller than /logo-black's 0.862). */
+const MARK_XS = 0.7;
 
 export class Text extends MyObject3D {
 
@@ -68,7 +70,7 @@ export class Text extends MyObject3D {
     // and 0.862 on a phone. FIT turns that into the stack's plane size (measured, see tmp probe bbox.mjs).
     const sw = Func.instance.sw();
     const xs = sw <= Conf.instance.BREAKPOINT;
-    let s = (xs ? 0.862 * FIT_XS : 0.403 * FIT_LG) * sw;
+    let s = (xs ? MARK_XS * FIT_XS : 0.403 * FIT_LG) * sw;
     s *= this._scale;
 
     this._mesh.scale.set(s, s, 1);

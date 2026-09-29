@@ -3,7 +3,9 @@ import { Conf } from './conf';
 
 export class Func {
   private static _instance: Func;
-  private _useFullScreen: boolean = !Conf.instance.IS_PC;
+  // emboss: always the visible area, so the mark is centred in what is seen (screen.height on a
+  // phone includes the browser bars and pushed it down)
+  private _useFullScreen: boolean = false;
 
   constructor() {}
 

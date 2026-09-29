@@ -9,15 +9,11 @@
         .art-credit { position: fixed; left: 16px; bottom: 16px; display: flex; gap: 16px; font: 12px/1.4 ui-monospace, monospace; text-transform: uppercase; mix-blend-mode: difference; color: #fff; z-index: 10; }
         .art-credit a { color: inherit; text-decoration: none; }
         .art-credit a:hover { text-decoration: underline; }
-        /* the mark itself over the flare, sized like /logo-black: 0.403 of the width, 0.862 on a phone */
-        .flare-mark { position: fixed; left: 50%; top: 50%; width: 40.3vw; transform: translate(-50%, -50%); mix-blend-mode: difference; pointer-events: none; z-index: 5; }
-        @media (max-width: 768px) { .flare-mark { width: 86.2vw; } }
     </style>
 </head>
 
 <body>
     <canvas class="l-canvas"></canvas>
-    <img class="flare-mark" src="/flare/assets/img/logo.svg" alt="" />
     <nav class="art-credit">
         <a href="/">grbpwr / art</a>
         <span>flare</span>
