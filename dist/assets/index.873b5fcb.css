@@ -1,0 +1,1 @@
+html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a}canvas{display:block;width:100vw;height:100vh;touch-action:none;cursor:-webkit-grab;cursor:grab}.sticker-hint{position:fixed;left:0;right:0;bottom:20px;text-align:center;font:11px/1.4 ui-monospace,monospace;text-transform:uppercase;letter-spacing:.04em;color:#6e6e6e;pointer-events:none}

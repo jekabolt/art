@@ -9,8 +9,8 @@ const W = 640
 const H = 480
 const LIVE = 0.2
 const CONTRAST = 2
-/** Paper white: the scan runs from black to this slightly yellow white instead of pure white. */
-const PAPER = [250, 244, 220]
+/** Paper white: the scan runs from black to this barely warm white instead of pure white. */
+const PAPER = [255, 252, 242]
 
 const canvas = document.getElementById('scan') as HTMLCanvasElement
 const ctx = canvas.getContext('2d', { willReadFrequently: true })!

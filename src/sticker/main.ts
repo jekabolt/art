@@ -1,6 +1,7 @@
-// STICKER: a white square sticker with the logo printed on it as a separate layer. Scrolling the
-// page rolls the printed layer up into a scroll from the right edge (and back); dragging turns the
-// paper in 3D. No lights, no shadows: flat white paper, flat black ink.
+// STICKER: a white square sticker with the logo printed on it as a separate layer. Dragging on the
+// paper rolls the print up into a scroll from the right edge (drag left) and back (drag right);
+// dragging beside the paper turns it in 3D; the wheel / trackpad rolls too. Nothing moves by itself.
+// No lights, no shadows: flat white paper, flat black ink.
 import { PerspectiveCamera } from 'three/src/cameras/PerspectiveCamera'
 import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
 import { Scene } from 'three/src/scenes/Scene'
@@ -11,6 +12,8 @@ import { MeshBasicMaterial } from 'three/src/materials/MeshBasicMaterial'
 import { ShaderMaterial } from 'three/src/materials/ShaderMaterial'
 import { CanvasTexture } from 'three/src/textures/CanvasTexture'
 import { Color } from 'three/src/math/Color'
+import { Raycaster } from 'three/src/core/Raycaster'
+import { Vector2 } from 'three/src/math/Vector2'
 import { DoubleSide } from 'three/src/constants'
 import './sticker.css'
 
@@ -48,7 +51,8 @@ const paper = new Group()
 scene.add(paper)
 
 // white paper
-paper.add(new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff, side: DoubleSide })))
+const sheet = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ color: 0xffffff, side: DoubleSide }))
+paper.add(sheet)
 
 // printed layer, rolled in the vertex shader around an axis parallel to y that moves right → left
 const layerMaterial = new ShaderMaterial({
@@ -95,63 +99,87 @@ function resize() {
   renderer.setSize(w, h, false)
   camera.aspect = w / h
   const side = Math.min(w <= 768 ? 0.78 * w : 0.42 * w, 0.75 * h) // paper side, px
+  paperPx = side
   // distance at which a 1-unit plane is `side` px tall on screen
   camera.position.z = h / side / (2 * Math.tan((camera.fov * Math.PI) / 360))
   camera.updateProjectionMatrix()
 }
 
-// --- roll: page scroll (wheel on desktop, swipe on a phone) -------------------------------------
-let roll = 0
-const scrollRoll = () => {
-  const max = document.documentElement.scrollHeight - window.innerHeight
-  return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0
-}
-
-// --- turn: drag rotates the paper; left alone it sways -------------------------------------------
+// --- input ----------------------------------------------------------------------------------------
+let roll = 0 // 0 flat … 1 rolled up to the left edge
+let rollTarget = 0
 let rotX = 0.12
 let rotY = -0.45
 let velX = 0
 let velY = 0
-let drag: { x: number; y: number } | null = null
-let lastInput = -1e9
+let paperPx = 300 // paper side on screen, for drag → roll
+
+type Drag = { mode: 'roll' | 'turn'; x: number; y: number; startX: number; startRoll: number }
+let drag: Drag | null = null
+
+const ray = new Raycaster()
+const onPaper = (x: number, y: number) => {
+  const ndc = new Vector2((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1)
+  ray.setFromCamera(ndc, camera)
+  return ray.intersectObject(sheet).length > 0
+}
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 canvas.addEventListener('pointerdown', (e) => {
-  drag = { x: e.clientX, y: e.clientY }
-  lastInput = performance.now()
+  canvas.setPointerCapture(e.pointerId)
+  drag = {
+    mode: onPaper(e.clientX, e.clientY) ? 'roll' : 'turn',
+    x: e.clientX,
+    y: e.clientY,
+    startX: e.clientX,
+    startRoll: rollTarget,
+  }
+  velX = velY = 0
 })
-window.addEventListener('pointermove', (e) => {
+canvas.addEventListener('pointermove', (e) => {
   if (!drag) return
-  const dx = e.clientX - drag.x
-  const dy = e.clientY - drag.y
-  drag = { x: e.clientX, y: e.clientY }
-  velY = dx * 0.008
-  velX = e.pointerType === 'mouse' ? dy * 0.008 : 0 // on touch, vertical swipes scroll (roll)
-  rotY += velY
-  rotX += velX
-  lastInput = performance.now()
+  if (drag.mode === 'roll') {
+    // pull the print: dragging left rolls it up, right lays it back
+    rollTarget = clamp01(drag.startRoll + (drag.startX - e.clientX) / paperPx)
+  } else {
+    velY = (e.clientX - drag.x) * 0.004
+    velX = (e.clientY - drag.y) * 0.004
+    rotY += velY
+    rotX += velX
+  }
+  drag.x = e.clientX
+  drag.y = e.clientY
 })
 const release = () => {
   drag = null
 }
-window.addEventListener('pointerup', release)
-window.addEventListener('pointercancel', release)
+canvas.addEventListener('pointerup', release)
+canvas.addEventListener('pointercancel', release)
 
-function frame(t: number) {
-  roll += (scrollRoll() - roll) * 0.15
+window.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault()
+    const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+    rollTarget = clamp01(rollTarget + d / (paperPx * 2))
+  },
+  { passive: false },
+)
+
+function frame() {
+  roll += (rollTarget - roll) * (drag?.mode === 'roll' ? 0.5 : 0.15)
   layerMaterial.uniforms.roll.value = roll
 
-  if (!drag) {
+  if (drag?.mode !== 'turn') {
+    // a turned paper keeps a little momentum, then stays where it was left
     rotY += velY
     rotX += velX
-    velX *= 0.94
-    velY *= 0.94
-    if (t - lastInput > 3000) {
-      // ease back towards a slow sway
-      rotY += (-0.45 + 0.25 * Math.sin(t * 0.0004) - rotY) * 0.01
-      rotX += (0.12 + 0.08 * Math.sin(t * 0.0003) - rotX) * 0.01
-    }
+    velX *= 0.92
+    velY *= 0.92
   }
-  rotX = Math.max(-1.2, Math.min(1.2, rotX))
+  // never edge-on: the paper stays readable
+  rotX = Math.max(-0.9, Math.min(0.9, rotX))
+  rotY = Math.max(-1.0, Math.min(1.0, rotY))
   paper.rotation.set(rotX, rotY, 0)
 
   renderer.render(scene, camera)
