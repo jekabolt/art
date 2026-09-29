@@ -12,6 +12,10 @@ import { Func } from '../core/func';
 import { MousePointer } from '../core/mousePointer';
 import { Util } from '../libs/util';
 
+/** Plane size per pixel of the wanted mark width, measured at rest (front layer + relief). */
+const FIT_LG = 3.95;
+const FIT_XS = 3.68;
+
 export class Text extends MyObject3D {
 
   private _mesh: Mesh;
@@ -60,7 +64,11 @@ export class Text extends MyObject3D {
   protected _update():void {
     super._update();
 
-    let s = Math.max(Func.instance.sw(), Func.instance.sh()) * 0.75;
+    // Sized like the logo pages (/logo-black, /logo-white): the mark is 0.403 of the width on desktop
+    // and 0.862 on a phone. FIT turns that into the stack's plane size (measured, see tmp probe bbox.mjs).
+    const sw = Func.instance.sw();
+    const xs = sw <= Conf.instance.BREAKPOINT;
+    let s = (xs ? 0.862 * FIT_XS : 0.403 * FIT_LG) * sw;
     s *= this._scale;
 
     this._mesh.scale.set(s, s, 1);
@@ -96,8 +104,10 @@ export class Text extends MyObject3D {
       ),
     );
 
-    this.position.x = s * 1 * mx * 0.15 * Util.instance.map(this._noise.x, -1, 1, 0, Conf.instance.TEXT_NUM - 1);
-    this.position.y = s * 1 * my * -0.15 * Util.instance.map(this._noise.x, -1, 1, 0, Conf.instance.TEXT_NUM - 1);
+    // The front layer (id 0) stays in the centre, like the logo pages; only the layers behind it
+    // trail the pointer, so the relief grows behind the logo instead of the whole logo drifting.
+    this.position.x = s * 1 * mx * 0.15 * Util.instance.map(this._noise.x, 0, 2, 0, Conf.instance.TEXT_NUM - 1);
+    this.position.y = s * 1 * my * -0.15 * Util.instance.map(this._noise.x, 0, 2, 0, Conf.instance.TEXT_NUM - 1);
     this.position.z = Util.instance.map(this._noise.x, 0, -1, 0, Conf.instance.TEXT_NUM - 1) * s * 1.1;
 
     const uni = this._getUni(this._mesh);

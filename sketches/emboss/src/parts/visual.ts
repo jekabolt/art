@@ -9,6 +9,9 @@ import { Conf } from '../core/conf';
 import { HSL } from '../libs/hsl';
 import { MousePointer } from '../core/mousePointer';
 
+/** /emboss-black: black logo on white; /emboss-white (and the old /emboss): white on black. */
+const isBlack = (): boolean => /^\/emboss-black(\/|$)/.test(window.location.pathname);
+
 export class Visual extends Canvas {
 
   private _con: Object3D;
@@ -19,6 +22,9 @@ export class Visual extends Canvas {
     this._con = new Object3D();
     this.mainScene.add(this._con);
 
+    // page and canvas behind the first frame match the tone (style.css is black)
+    if (isBlack()) document.body.classList.add('-black');
+
     // this._con.rotation.x = Util.instance.radian(45);
     // this._con.rotation.z = Util.instance.radian(-45);
 
@@ -28,7 +34,8 @@ export class Visual extends Canvas {
       const hsl = new HSL();
       col.getHSL(hsl);
       hsl.h = Util.instance.map(i, 0, 1, 0, num - 1);
-      hsl.l = Util.instance.map(i, 1, 0.25, 0, num - 1);
+      // white: front layer white fading to grey behind; black: front layer black lightening behind
+      hsl.l = isBlack() ? Util.instance.map(i, 0, 0.75, 0, num - 1) : Util.instance.map(i, 1, 0.25, 0, num - 1);
       col.setHSL(hsl.h, hsl.s, hsl.l);
 
       this._con.add(new Text({
@@ -59,7 +66,7 @@ export class Visual extends Canvas {
 
 
   private _render(): void {
-    this.renderer.setClearColor(0x000000, 1);
+    this.renderer.setClearColor(isBlack() ? 0xffffff : 0x000000, 1);
     this.renderer.render(this.mainScene, this.cameraPers);
   }
 

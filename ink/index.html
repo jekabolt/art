@@ -184,9 +184,11 @@
     void main () {
         vec3 C = texture2D(u_output_texture, vUv).rgb;
         float text = texture2D(u_text_texture, vec2(vUv.x, 1. - vUv.y)).r;
-        float a = max(C.r, max(C.g, C.b));
-        a += text;
-        gl_FragColor = vec4(vec3(1.) - C, a);
+        // black ink and black logo on an opaque white page, the same on every GPU
+        // (the old transparent output let the canvas background show through on desktop)
+        vec3 ink = clamp(C, 0., 1.);
+        float mark = clamp(text, 0., 1.);
+        gl_FragColor = vec4(vec3(1.) - max(ink, vec3(mark)), 1.);
     }
 </script>
 

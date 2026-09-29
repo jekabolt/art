@@ -87,3 +87,7 @@ body {
         font-size: 14px;
     }
 }
+body.-black,
+body.-black .l-canvas {
+  background-color: #fff;
+}
