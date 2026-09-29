@@ -1,5 +1,6 @@
 import { Con } from './con/con'
 import { isWhiteLogo } from './core/route'
+import './fonts/fonts.css'
 import './style.css'
 
 // Wait for DOM to be ready

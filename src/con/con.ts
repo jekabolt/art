@@ -8,7 +8,7 @@ import { Points } from 'three/src/objects/Points';
 import { Conf } from '../core/conf';
 import { Func } from '../core/func';
 import { Param } from '../core/param';
-import { isWhiteLogo } from '../core/route';
+import { isGyro, isWhiteLogo } from '../core/route';
 import meshFg from '../glsl/mesh.frag';
 import meshVt from '../glsl/mesh.vert';
 import { Util } from '../libs/util';
@@ -67,10 +67,48 @@ export class Con extends Canvas {
     // Swipe controls
     this._initSwipeControls()
 
+    // /gyro: the phone's heading turns the logo (swipe stays as the fallback on desktop)
+    if (isGyro()) this._initGyro()
+
     // 画像解析
     this._loadImg()
 
     this._resize()
+  }
+
+  private _initGyro(): void {
+    const btn = document.querySelector<HTMLButtonElement>('.l-gyro')
+    let prev: number | null = null
+    const onOrientation = (e: DeviceOrientationEvent) => {
+      if (e.alpha == null) return
+      const alpha = Number(e.alpha)
+      if (prev != null) {
+        // unwrap 359° → 0° so a full turn keeps going instead of spinning back
+        let d = alpha - prev
+        if (d > 180) d -= 360
+        if (d < -180) d += 360
+        this._totalRotation += d
+        this._val = ((this._totalRotation % 360) + 360) % 360
+        this._lastInteractionTime = Date.now() // the phone holds the angle: no auto-return
+        this._needsRender = true
+      }
+      prev = alpha
+    }
+    const listen = () => {
+      window.addEventListener('deviceorientation', onOrientation, true)
+      btn?.classList.add('-none')
+    }
+    const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined
+    if (!DOE) {
+      btn?.classList.add('-none')
+    } else if (typeof DOE.requestPermission === 'function') {
+      // iOS: permission only from a tap
+      btn?.addEventListener('click', () => {
+        DOE.requestPermission!().then((r) => r === 'granted' && listen()).catch(() => btn.classList.add('-none'))
+      })
+    } else {
+      listen()
+    }
   }
 
   private _initSwipeControls(): void {

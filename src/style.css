@@ -112,3 +112,20 @@ p {
     animation: fade 10.5s infinite;
     /* 6 texts * 1.5s each + 1.5s delay */
 }
+/* /gyro: iOS asks for motion access only from a tap */
+.l-gyro {
+    position: fixed;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    height: 32px;
+    padding: 0 16px;
+    border: 1px solid #000;
+    border-radius: 0;
+    background: #fff;
+    color: #000;
+    font: 12px/1 'FeatureMono', ui-monospace, monospace;
+    text-transform: uppercase;
+    cursor: pointer;
+    z-index: 2;
+}

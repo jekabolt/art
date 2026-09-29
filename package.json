@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:sketches": "for s in emboss flare portrait; do (cd sketches/$s && npm ci && npx vite build) || exit 1; done"
   },
   "devDependencies": {
     "@types/events": "^3.0.0",

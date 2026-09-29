@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>slit-scan — grbpwr</title>
+  <script type="module" crossorigin src="/assets/index.5167d835.js"></script>
+  <link rel="modulepreload" href="/assets/modulepreload-polyfill.b7f2da20.js">
+  <link rel="stylesheet" href="/assets/index.7947e866.css">
+  <link rel="stylesheet" href="/assets/fonts.1580bea8.css">
+  <link rel="stylesheet" href="/assets/site.6e128e7e.css">
+</head>
+
+<body class="site slit">
+    <header class="site-bar">
+        <a href="/">grbpwr / art</a>
+        <span>slit-scan</span>
+    </header>
+
+    <main class="slit-main">
+        <div class="slit-frame">
+            <canvas id="scan" width="640" height="480" aria-label="slit-scan of the camera"></canvas>
+            <div id="overlay" class="slit-overlay" hidden>
+                <img alt="slit-scan picture — hold to save" />
+                <span>hold to save · tap to scan again</span>
+            </div>
+        </div>
+        <div class="slit-bar">
+            <span id="status" class="slit-status" aria-live="polite">allow the camera to start</span>
+            <button id="save" type="button" class="slit-save" aria-label="save picture">
+                <img src="/assets/img/logo/white.png" alt="" width="32" height="32" />
+                <span>save</span>
+            </button>
+        </div>
+    </main>
+
+    
+</body>
+
+</html>
