@@ -15,12 +15,12 @@ import { HalfFloatType, LinearFilter, LinearMipmapLinearFilter, RGBAFormat } fro
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './melt.css'
 
-/** Empty margin around the logo in its texture, per side: the smear and the glow flow out past the
- *  mark instead of being cut off by the square (a cut edge reads as an outline). */
+/** Empty margin around the logo in its texture, per side: the smear flows out past the mark instead
+ *  of being cut off by the square (a cut edge reads as an outline). */
 const PAD = 0.2
 
-/** The logo in white on a transparent square of `px` (a power of two); small ones, stretched, are
- *  the blurred copies. */
+/** The logo in white on a transparent square of `px` (a power of two); a small one, stretched, is
+ *  the blurred copy. */
 function logoTexture(px: number): CanvasTexture {
   const c = document.createElement('canvas')
   c.width = c.height = px
@@ -145,7 +145,6 @@ const showMat = new ShaderMaterial({
     field: { value: null },
     logo: { value: logoTexture(2048) },
     goo: { value: logoTexture(256) },
-    soft: { value: logoTexture(96) },
     aspect: { value: 1 },
     side: { value: 0.5 }, // texture side (logo + PAD) in screen heights
     time: { value: 0 },
@@ -155,11 +154,12 @@ const showMat = new ShaderMaterial({
     uniform sampler2D field;
     uniform sampler2D logo;
     uniform sampler2D goo;
-    uniform sampler2D soft;
     uniform float aspect;
     uniform float side;
     uniform float time;
     varying vec2 vUv;
+
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 17853.77); }
 
     // oil-film rainbow: a cosine palette running through time and across the logo
     vec3 film(float t) { return 0.5 + 0.5 * cos(6.2831853 * (t + vec3(0.0, 0.33, 0.67))); }
@@ -184,9 +184,11 @@ const showMat = new ShaderMaterial({
       // screen → logo square
       vec2 luv = (vUv - 0.5) * vec2(aspect, 1.0) / side + 0.5;
 
-      // smear against the motion, drip down, and a slow breathing so the logo is never quite still
+      // smear against the motion, drip down, grain where it is disturbed, and a slow breathing so
+      // the logo is never quite still
       vec2 off = -v * 0.17;
       off.y += m * m * 0.06;
+      off += (hash(luv * 512.0 + fract(time)) - 0.5) * 0.025 * m;
       off += 0.0025 * vec2(sin(luv.y * 7.0 + time * 0.7), cos(luv.x * 6.0 + time * 0.5));
       vec2 p = luv + off;
 
@@ -198,11 +200,9 @@ const showMat = new ShaderMaterial({
         melt(p - vec2(split * sin(time + luv.x), 0.0), m)
       );
 
-      // the rainbow, only in the smear: it tints the ink and glows in a halo around it
+      // the rainbow, only in the smear and only on the ink itself (a halo around it outlines the mark)
       vec3 rainbow = film(time * 0.4 + luv.x * luv.y * 1.5 + m * 0.5);
-      float glow = ink(soft, p);
-      col = mix(col, col * rainbow, clamp(glow * m * 1.4, 0.0, 0.85));
-      col += max(glow - col.g, 0.0) * rainbow * m * 2.2;
+      col = mix(col, col * rainbow, clamp(m * 1.4, 0.0, 0.85));
 
       gl_FragColor = vec4(min(col, 1.0), 1.0);
     }
