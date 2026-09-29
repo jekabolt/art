@@ -11,11 +11,11 @@ import { PlaneGeometry } from 'three/src/geometries/PlaneGeometry'
 import { ShaderMaterial } from 'three/src/materials/ShaderMaterial'
 import { CanvasTexture } from 'three/src/textures/CanvasTexture'
 import { Vector2 } from 'three/src/math/Vector2'
-import { HalfFloatType, LinearFilter, RGBAFormat } from 'three/src/constants'
+import { HalfFloatType, LinearFilter, LinearMipmapLinearFilter, RGBAFormat } from 'three/src/constants'
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './melt.css'
 
-/** The logo in white on a transparent square of `px`; small sizes, stretched, give the soft copy. */
+/** The logo in white on a transparent square of `px` (a power of two); a small one, stretched, is the soft copy. */
 function logoTexture(px: number): CanvasTexture {
   const c = document.createElement('canvas')
   c.width = c.height = px
@@ -27,8 +27,9 @@ function logoTexture(px: number): CanvasTexture {
   g.strokeStyle = '#fff'
   g.stroke(new Path2D(LOGO_PATH))
   const t = new CanvasTexture(c)
-  t.minFilter = t.magFilter = LinearFilter
-  t.generateMipmaps = false
+  // mipmapped: the 2048 logo is shown at a few hundred px, and plain linear sampling would alias
+  t.minFilter = LinearMipmapLinearFilter
+  t.magFilter = LinearFilter
   return t
 }
 
@@ -45,6 +46,7 @@ const VERT = /* glsl */ `
 `
 
 // --- velocity field: ping-pong targets, spread + fade + a splat along the pointer segment ----------
+const FADE_PER_60FPS_FRAME = 0.972
 const FIELD_SCALE = 0.25 // field resolution relative to the screen
 const targetOpts = { type: HalfFloatType, format: RGBAFormat, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: false }
 let fieldA = new WebGLRenderTarget(4, 4, targetOpts)
@@ -59,7 +61,7 @@ const fieldMat = new ShaderMaterial({
     to: { value: new Vector2(-9, -9) },
     vel: { value: new Vector2() },
     radius: { value: 0.07 },
-    fade: { value: 0.972 },
+    fade: { value: 0.972 }, // set every frame from FADE_PER_60FPS_FRAME
   },
   vertexShader: VERT,
   fragmentShader: /* glsl */ `
@@ -223,6 +225,8 @@ function frame(now: number) {
   last = now
 
   const u = fieldMat.uniforms
+  // fade by time, not by frame, so a slow phone clears the smear as fast as a fast screen
+  u.fade.value = Math.pow(FADE_PER_60FPS_FRAME, dt * 60)
   if (pointer.active && (pointer.x !== pointer.px || pointer.y !== pointer.py)) {
     const aspect = u.aspect.value as number
     // velocity in screen heights per frame at 60 fps, gained so a brisk swipe saturates
