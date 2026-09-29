@@ -309,7 +309,10 @@ function render(t) {
 
 function resizeCanvas() {
     loadImageAndCreateTexture(params.imageSrc);
-    params.pointerSize = 4 / window.innerHeight;
+    // splat radius follows the height; on a portrait screen scale it by width/height so the
+    // pointer is not as wide as the phone
+    const portrait = Math.min(1, window.innerWidth / window.innerHeight);
+    params.pointerSize = (4 / window.innerHeight) * portrait * portrait;
     canvasEl.width = textureEl.width = window.innerWidth;
     canvasEl.height = textureEl.height = window.innerHeight;
     render()

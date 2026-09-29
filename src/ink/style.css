@@ -10,7 +10,15 @@ canvas {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: #fff;
+    /* the 2024 dark canvas: on phones it tints the ink slightly yellow, which is the look */
+    background-color: #05000f;
+}
+
+/* desktop (mouse): desktop Safari shows this background through as black, so white there */
+@media (hover: hover) and (pointer: fine) {
+    canvas {
+        background-color: #fff;
+    }
 }
 
 .lil-gui {
