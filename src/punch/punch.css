@@ -109,6 +109,13 @@
     text-transform: none;
 }
 
+/* Desktop: the card a bit smaller than the full width, aligned with the controls above it. */
+@media (min-width: 1024px) {
+    .punch-card {
+        width: 85%;
+    }
+}
+
 @media (max-width: 599px) {
     .punch-tools .button {
         width: 100%;
