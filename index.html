@@ -4,12 +4,36 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>grbpwr</title>
+    <title>art — grbpwr</title>
+    <script>
+        // Inside an iframe "/" is an older storefront footer that still points here: show the logo it expects.
+        if (window.self !== window.top) location.replace('/logo-black' + location.search)
+    </script>
 </head>
 
-<body>
-    <canvas id="js-con"></canvas>
-    <script type="module" src="/src/main.ts"></script>
+<body class="site">
+    <header class="site-bar">
+        <span>grbpwr / art</span>
+        <a href="https://grbpwr.com">grbpwr.com</a>
+    </header>
+
+    <main class="gallery">
+        <!-- One tile per piece: link, poster (square, /assets/img/gallery/), name. -->
+        <a class="tile" href="/logo-black">
+            <img src="/assets/img/gallery/logo-black.png" alt="" width="800" height="800" />
+            <span>logo black</span>
+        </a>
+        <a class="tile" href="/logo-white">
+            <img src="/assets/img/gallery/logo-white.png" alt="" width="800" height="800" />
+            <span>logo white</span>
+        </a>
+        <a class="tile" href="/punch-card">
+            <img src="/assets/img/gallery/punch-card.png" alt="" width="800" height="800" />
+            <span>punch card</span>
+        </a>
+    </main>
+
+    <script type="module" src="/src/gallery/main.ts"></script>
 </body>
 
 </html>

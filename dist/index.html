@@ -4,15 +4,38 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>grbpwr</title>
-  <script type="module" crossorigin src="/assets/preload-helper.de811724.js"></script>
-  <script type="module" crossorigin src="/assets/vendor.81823311.js"></script>
-  <script type="module" crossorigin src="/assets/main.5528f433.js"></script>
-  <link rel="stylesheet" href="/assets/main.3892db2f.css">
+    <title>art — grbpwr</title>
+    <script>
+        // Inside an iframe "/" is an older storefront footer that still points here: show the logo it expects.
+        if (window.self !== window.top) location.replace('/logo-black' + location.search)
+    </script>
+  <script type="module" crossorigin src="/assets/modulepreload-polyfill.b7f2da20.js"></script>
+  <link rel="stylesheet" href="/assets/index.39d334d6.css">
+  <link rel="stylesheet" href="/assets/site.939ef4af.css">
 </head>
 
-<body>
-    <canvas id="js-con"></canvas>
+<body class="site">
+    <header class="site-bar">
+        <span>grbpwr / art</span>
+        <a href="https://grbpwr.com">grbpwr.com</a>
+    </header>
+
+    <main class="gallery">
+        <!-- One tile per piece: link, poster (square, /assets/img/gallery/), name. -->
+        <a class="tile" href="/logo-black">
+            <img src="/assets/img/gallery/logo-black.png" alt="" width="800" height="800" />
+            <span>logo black</span>
+        </a>
+        <a class="tile" href="/logo-white">
+            <img src="/assets/img/gallery/logo-white.png" alt="" width="800" height="800" />
+            <span>logo white</span>
+        </a>
+        <a class="tile" href="/punch-card">
+            <img src="/assets/img/gallery/punch-card.png" alt="" width="800" height="800" />
+            <span>punch card</span>
+        </a>
+    </main>
+
     
 </body>
 
