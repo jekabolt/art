@@ -25,7 +25,7 @@ export class Visual extends Canvas {
     this._con = new Object3D();
     this.mainScene.add(this._con);
 
-    const t = TexLoader.instance.get(Conf.instance.PATH_IMG + 't-test.jpg');
+    const t = TexLoader.instance.get(Conf.instance.PATH_IMG + 'logo.jpg');
 
     this._left = new BaseItem(new Vector2(0.5, 1), t);
     this._con.add(this._left);
