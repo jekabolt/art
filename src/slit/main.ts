@@ -9,6 +9,8 @@ const W = 640
 const H = 480
 const LIVE = 0.2
 const CONTRAST = 2
+/** Paper white: the scan runs from black to this slightly yellow white instead of pure white. */
+const PAPER = [250, 244, 220]
 
 const canvas = document.getElementById('scan') as HTMLCanvasElement
 const ctx = canvas.getContext('2d', { willReadFrequently: true })!
@@ -72,7 +74,10 @@ function draw() {
     const d = img.data
     for (let i = 0; i < d.length; i += 4) {
       const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]
-      d[i] = d[i + 1] = d[i + 2] = Math.max(0, Math.min(255, (lum - 128) * CONTRAST + 128))
+      const v = Math.max(0, Math.min(255, (lum - 128) * CONTRAST + 128)) / 255
+      d[i] = v * PAPER[0]
+      d[i + 1] = v * PAPER[1]
+      d[i + 2] = v * PAPER[2]
     }
 
     // smear: shift the scanned part right by one pixel, then copy the live edge in
@@ -92,8 +97,16 @@ saveBtn.addEventListener('click', () => {
   const o = out.getContext('2d')!
   o.drawImage(canvas, 0, 0)
   if (logo.complete && logo.naturalWidth) {
+    // the logo in the same paper white as the scan
     const s = 36
-    o.drawImage(logo, W - s - 12, H - s - 12, s, s)
+    const tint = document.createElement('canvas')
+    tint.width = tint.height = s
+    const t = tint.getContext('2d')!
+    t.drawImage(logo, 0, 0, s, s)
+    t.globalCompositeOperation = 'source-in'
+    t.fillStyle = `rgb(${PAPER.join(',')})`
+    t.fillRect(0, 0, s, s)
+    o.drawImage(tint, W - s - 12, H - s - 12)
   }
   const url = out.toDataURL('image/png')
   if (isPhone()) {
