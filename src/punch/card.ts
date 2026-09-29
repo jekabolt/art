@@ -14,6 +14,7 @@ const COL_W = 22
 const ROW_Y = 147
 const ROW_PITCH = 52
 const HOLE_H = 32
+const HOLE_STROKE = 1
 
 const HEADER_PT = 24
 const HEADER_BASELINE = 90
@@ -21,6 +22,7 @@ const DIGIT_PT = 16.34
 const DIGIT_BASELINE = 168.5
 
 const INK = '#000000'
+const PAPER = '#ffffff'
 const DIGIT = '#6e6e6e'
 const MARK = '#cecece'
 
@@ -44,7 +46,7 @@ const glyph = (col: number, y: number, size: number, fill: string, text: string)
 
 export function cardPrims(text: string): Prim[] {
   const out: Prim[] = [
-    { kind: 'rect', x: 0, y: 0, w: CARD_W, h: CARD_H, fill: '#ffffff' },
+    { kind: 'rect', x: 0, y: 0, w: CARD_W, h: CARD_H, fill: PAPER },
     // Cut corner and the tab on the right, both from the artwork.
     { kind: 'poly', points: [[1, 1], [66, 1], [1, 66]], fill: MARK },
     { kind: 'rect', x: 1806, y: 34, w: 35, h: 65, fill: MARK },
@@ -61,16 +63,24 @@ export function cardPrims(text: string): Prim[] {
     }
   }
 
+  // A hole = the column cell with a 1 pt white inside stroke (as on the artwork), so neighbouring
+  // holes stay apart instead of merging into a bar. Drawn as white cell + black inset; it is in
+  // card units, so it scales with the card like everything else.
   chars.forEach((ch, col) => {
     for (const row of punches(ch)) {
-      out.push({
-        kind: 'rect',
-        x: COL_X + col * COL_W,
-        y: ROW_Y + row * ROW_PITCH,
-        w: COL_W,
-        h: HOLE_H,
-        fill: INK,
-      })
+      const x = COL_X + col * COL_W
+      const y = ROW_Y + row * ROW_PITCH
+      out.push(
+        { kind: 'rect', x, y, w: COL_W, h: HOLE_H, fill: PAPER },
+        {
+          kind: 'rect',
+          x: x + HOLE_STROKE,
+          y: y + HOLE_STROKE,
+          w: COL_W - 2 * HOLE_STROKE,
+          h: HOLE_H - 2 * HOLE_STROKE,
+          fill: INK,
+        },
+      )
     }
   })
 
