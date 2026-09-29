@@ -109,10 +109,11 @@
     text-transform: none;
 }
 
-/* Desktop: the card a bit smaller than the full width, aligned with the controls above it. */
+/* Desktop: the card a bit smaller than the full width, centred. */
 @media (min-width: 1024px) {
     .punch-card {
         width: 85%;
+        margin-inline: auto;
     }
 }
 
