@@ -15,12 +15,18 @@ import { HalfFloatType, LinearFilter, LinearMipmapLinearFilter, RGBAFormat } fro
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './melt.css'
 
-/** The logo in white on a transparent square of `px` (a power of two); a small one, stretched, is the soft copy. */
+/** Empty margin around the logo in its texture, per side: the smear and the glow flow out past the
+ *  mark instead of being cut off by the square (a cut edge reads as an outline). */
+const PAD = 0.2
+
+/** The logo in white on a transparent square of `px` (a power of two); small ones, stretched, are
+ *  the blurred copies. */
 function logoTexture(px: number): CanvasTexture {
   const c = document.createElement('canvas')
   c.width = c.height = px
   const g = c.getContext('2d')!
-  const k = px / LOGO_SPAN
+  const k = (px * (1 - 2 * PAD)) / LOGO_SPAN
+  g.translate(px * PAD, px * PAD)
   g.scale(k, k)
   g.translate(-LOGO_MIN, -LOGO_MIN)
   g.lineWidth = LOGO_STROKE
@@ -46,11 +52,12 @@ const VERT = /* glsl */ `
 `
 
 // --- velocity field: ping-pong targets, spread + fade + a splat along the pointer segment ----------
-const FADE_PER_60FPS_FRAME = 0.972
+const FADE_PER_60FPS_FRAME = 0.982
 const FIELD_SCALE = 0.25 // field resolution relative to the screen
 const targetOpts = { type: HalfFloatType, format: RGBAFormat, minFilter: LinearFilter, magFilter: LinearFilter, depthBuffer: false }
 let fieldA = new WebGLRenderTarget(4, 4, targetOpts)
 let fieldB = new WebGLRenderTarget(4, 4, targetOpts)
+const fieldSoft = new WebGLRenderTarget(4, 4, targetOpts)
 
 const fieldMat = new ShaderMaterial({
   uniforms: {
@@ -85,12 +92,14 @@ const fieldMat = new ShaderMaterial({
     }
 
     void main() {
-      // spread a little into the neighbours (the smear widens as it fades), then fade
-      vec2 v = texture2D(prev, vUv).xy * 0.6
-        + (texture2D(prev, vUv + vec2(texel.x, 0.0)).xy
-         + texture2D(prev, vUv - vec2(texel.x, 0.0)).xy
-         + texture2D(prev, vUv + vec2(0.0, texel.y)).xy
-         + texture2D(prev, vUv - vec2(0.0, texel.y)).xy) * 0.1;
+      // the field carries itself along (a stroke keeps flowing like syrup), spreads into the
+      // neighbours (the smear widens and softens as it goes), then fades
+      vec2 back = vUv - texture2D(prev, vUv).xy * texel * 5.0;
+      vec2 v = texture2D(prev, back).xy * 0.4
+        + (texture2D(prev, back + vec2(texel.x, 0.0)).xy
+         + texture2D(prev, back - vec2(texel.x, 0.0)).xy
+         + texture2D(prev, back + vec2(0.0, texel.y)).xy
+         + texture2D(prev, back - vec2(0.0, texel.y)).xy) * 0.15;
       v *= fade;
       float d = segDist(vUv, from, to);
       v += vel * exp(-(d * d) / (radius * radius));
@@ -104,27 +113,53 @@ const fieldMat = new ShaderMaterial({
 const fieldScene = new Scene()
 fieldScene.add(new Mesh(quad, fieldMat))
 
+// the field through a wide soft kernel, at field resolution: the smear then has no hard rim where it
+// folds, for the price of a small pass instead of 25 taps per screen pixel
+const blurMat = new ShaderMaterial({
+  uniforms: { src: { value: null }, texel: { value: new Vector2() } },
+  vertexShader: VERT,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D src;
+    uniform vec2 texel;
+    varying vec2 vUv;
+    void main() {
+      vec2 v = vec2(0.0);
+      float wsum = 0.0;
+      for (int j = -2; j <= 2; j++) {
+        for (int i = -2; i <= 2; i++) {
+          float w = exp(-float(i * i + j * j) / 4.0);
+          v += texture2D(src, vUv + vec2(float(i), float(j)) * texel * 2.0).xy * w;
+          wsum += w;
+        }
+      }
+      gl_FragColor = vec4(v / wsum, 0.0, 1.0);
+    }
+  `,
+})
+const blurScene = new Scene()
+blurScene.add(new Mesh(quad, blurMat))
+
 // --- display: the logo read through the field -----------------------------------------------------
 const showMat = new ShaderMaterial({
   uniforms: {
     field: { value: null },
     logo: { value: logoTexture(2048) },
+    goo: { value: logoTexture(256) },
     soft: { value: logoTexture(96) },
     aspect: { value: 1 },
-    side: { value: 0.5 }, // logo side in screen heights
+    side: { value: 0.5 }, // texture side (logo + PAD) in screen heights
     time: { value: 0 },
   },
   vertexShader: VERT,
   fragmentShader: /* glsl */ `
     uniform sampler2D field;
     uniform sampler2D logo;
+    uniform sampler2D goo;
     uniform sampler2D soft;
     uniform float aspect;
     uniform float side;
     uniform float time;
     varying vec2 vUv;
-
-    float hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 17853.77); }
 
     // oil-film rainbow: a cosine palette running through time and across the logo
     vec3 film(float t) { return 0.5 + 0.5 * cos(6.2831853 * (t + vec3(0.0, 0.33, 0.67))); }
@@ -134,6 +169,14 @@ const showMat = new ShaderMaterial({
       return texture2D(tex, uv).a;
     }
 
+    // the ink turns to goo where it is disturbed: the crisp mark gives way to a blurred copy cut at
+    // half, which rounds every corner and fuses nearby strokes like melting wax
+    float melt(vec2 uv, float m) {
+      float sharp = ink(logo, uv);
+      float blob = smoothstep(0.32, 0.62, ink(goo, uv));
+      return mix(sharp, blob, smoothstep(0.0, 0.45, m));
+    }
+
     void main() {
       vec2 v = texture2D(field, vUv).xy;
       float m = clamp(length(v), 0.0, 1.0);
@@ -141,20 +184,18 @@ const showMat = new ShaderMaterial({
       // screen → logo square
       vec2 luv = (vUv - 0.5) * vec2(aspect, 1.0) / side + 0.5;
 
-      // smear against the motion, drip down, grain where it is disturbed, and a slow breathing
-      // so the logo is never quite still
-      vec2 off = -v * 0.22;
-      off.y += m * m * 0.07;
-      off += (hash(luv * 512.0 + fract(time)) - 0.5) * 0.025 * m;
+      // smear against the motion, drip down, and a slow breathing so the logo is never quite still
+      vec2 off = -v * 0.17;
+      off.y += m * m * 0.06;
       off += 0.0025 * vec2(sin(luv.y * 7.0 + time * 0.7), cos(luv.x * 6.0 + time * 0.5));
       vec2 p = luv + off;
 
       // channel split, strongest where the field is
-      float split = sin((luv.x + luv.y) * 18.0) * 0.035 * m;
+      float split = sin((luv.x + luv.y) * 12.0) * 0.022 * m;
       vec3 col = vec3(
-        ink(logo, p + vec2(split * sin(time * 2.0), 0.0)),
-        ink(logo, p),
-        ink(logo, p - vec2(split * sin(time + luv.x), 0.0))
+        melt(p + vec2(split * sin(time * 2.0), 0.0), m),
+        melt(p, m),
+        melt(p - vec2(split * sin(time + luv.x), 0.0), m)
       );
 
       // the rainbow, only in the smear: it tints the ink and glows in a halo around it
@@ -182,12 +223,14 @@ function resize() {
   fieldA.setSize(fw, fh)
   fieldB.setSize(fw, fh)
   fieldMat.uniforms.texel.value.set(1 / fw, 1 / fh)
+  fieldSoft.setSize(fw, fh)
+  blurMat.uniforms.texel.value.set(1 / fw, 1 / fh)
   fieldMat.uniforms.aspect.value = w / h
   showMat.uniforms.aspect.value = w / h
   // as wide as the mark on the logo pages: about half the width on phones, a third on desktop
   const sidePx = Math.min(w <= 768 ? 0.6 * w : 0.3 * w, 0.6 * h)
-  showMat.uniforms.side.value = sidePx / h
-  fieldMat.uniforms.radius.value = (w <= 768 ? 0.09 : 0.06) * (sidePx / h) * 2
+  showMat.uniforms.side.value = sidePx / h / (1 - 2 * PAD)
+  fieldMat.uniforms.radius.value = (w <= 768 ? 0.12 : 0.09) * (sidePx / h) * 2
 }
 
 // --- input ------------------------------------------------------------------------------------------
@@ -248,7 +291,12 @@ function frame(now: number) {
   renderer.setRenderTarget(null)
   ;[fieldA, fieldB] = [fieldB, fieldA]
 
-  showMat.uniforms.field.value = fieldA.texture
+  blurMat.uniforms.src.value = fieldA.texture
+  renderer.setRenderTarget(fieldSoft)
+  renderer.render(blurScene, camera)
+  renderer.setRenderTarget(null)
+
+  showMat.uniforms.field.value = fieldSoft.texture
   showMat.uniforms.time.value = now / 1000
   renderer.clear()
   renderer.render(showScene, camera)
