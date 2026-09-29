@@ -98,7 +98,7 @@ function resize() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.setSize(w, h, false)
   camera.aspect = w / h
-  const side = Math.min(w <= 768 ? 0.78 * w : 0.42 * w, 0.75 * h) // paper side, px
+  const side = Math.min(w <= 768 ? 0.55 * w : 0.28 * w, 0.5 * h) // paper side, px
   paperPx = side
   // distance at which a 1-unit plane is `side` px tall on screen
   camera.position.z = h / side / (2 * Math.tan((camera.fov * Math.PI) / 360))
@@ -113,6 +113,11 @@ let rotY = -0.45
 let velX = 0
 let velY = 0
 let paperPx = 300 // paper side on screen, for drag → roll
+
+const REST_X = 0.12
+const REST_Y = -0.45
+const IDLE_MS = 2000 // left alone this long, the print rolls back flat and the paper turns back
+let lastInput = -1e9
 
 type Drag = { mode: 'roll' | 'turn'; x: number; y: number; startX: number; startRoll: number }
 let drag: Drag | null = null
@@ -135,6 +140,7 @@ canvas.addEventListener('pointerdown', (e) => {
     startRoll: rollTarget,
   }
   velX = velY = 0
+  lastInput = performance.now()
 })
 canvas.addEventListener('pointermove', (e) => {
   if (!drag) return
@@ -149,9 +155,11 @@ canvas.addEventListener('pointermove', (e) => {
   }
   drag.x = e.clientX
   drag.y = e.clientY
+  lastInput = performance.now()
 })
 const release = () => {
   drag = null
+  lastInput = performance.now()
 }
 canvas.addEventListener('pointerup', release)
 canvas.addEventListener('pointercancel', release)
@@ -162,11 +170,19 @@ window.addEventListener(
     e.preventDefault()
     const d = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
     rollTarget = clamp01(rollTarget + d / (paperPx * 2))
+    lastInput = performance.now()
   },
   { passive: false },
 )
 
-function frame() {
+function frame(t: number) {
+  if (!drag && t - lastInput > IDLE_MS) {
+    // nobody is touching it: roll the print back down and turn the paper back, slowly
+    rollTarget += (0 - rollTarget) * 0.04
+    rotY += (REST_Y - rotY) * 0.04
+    rotX += (REST_X - rotX) * 0.04
+    velX = velY = 0
+  }
   roll += (rollTarget - roll) * (drag?.mode === 'roll' ? 0.5 : 0.15)
   layerMaterial.uniforms.roll.value = roll
 
