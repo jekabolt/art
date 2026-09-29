@@ -8,7 +8,7 @@ export class Conf {
   public FLG_TEST: boolean = location.href.includes('10.0.1.33') || location.href.includes('localhost') ;
 
   // パス
-  public PATH_IMG: string = './assets/img/';
+  public PATH_IMG: string = '/assets/img/';
 
   // タッチデバイス
   public USE_TOUCH: boolean = Util.instance.isTouchDevice();

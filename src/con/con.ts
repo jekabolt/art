@@ -8,6 +8,7 @@ import { Points } from 'three/src/objects/Points';
 import { Conf } from '../core/conf';
 import { Func } from '../core/func';
 import { Param } from '../core/param';
+import { isWhiteLogo } from '../core/route';
 import meshFg from '../glsl/mesh.frag';
 import meshVt from '../glsl/mesh.vert';
 import { Util } from '../libs/util';
@@ -52,10 +53,8 @@ export class Con extends Canvas {
   constructor(opt: any) {
     super(opt);
 
-    // On the /invert path the background is black, so use the white logo.
-    const pathname = window.location.pathname
-    const isInvertPath = pathname === '/invert' || pathname.startsWith('/invert/')
-    if (isInvertPath) {
+    // On /logo-white (and /invert) the background is black, so use the white logo.
+    if (isWhiteLogo()) {
       this._colorIndex = 1 // white
     }
 
@@ -511,10 +510,7 @@ export class Con extends Canvas {
   }
 
   private _render(): void {
-    // Check if we're on the /invert path for black background
-    const pathname = window.location.pathname
-    const isInvertPath = pathname === '/invert' || pathname.startsWith('/invert/')
-    const bgColor = isInvertPath ? 0x000000 : 0xffffff
+    const bgColor = isWhiteLogo() ? 0x000000 : 0xffffff
     this.renderer.setClearColor(bgColor, 1)
     this.renderer.render(this.mainScene, this.camera)
   }

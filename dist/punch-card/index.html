@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>punch card — grbpwr</title>
+  <script type="module" crossorigin src="/assets/index.0a081fbc.js"></script>
+  <link rel="modulepreload" href="/assets/preload-helper.de811724.js">
+  <link rel="stylesheet" href="/assets/index.af512a54.css">
+</head>
+
+<body class="site">
+    <header class="site-bar">
+        <a href="/">grbpwr / art</a>
+        <span>punch card</span>
+    </header>
+
+    <main class="punch">
+        <div class="punch-field">
+            <label for="text">text</label>
+            <input id="text" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <span id="count" class="punch-count"></span>
+        </div>
+        <p id="hint" class="punch-hint" aria-live="polite"></p>
+
+        <div class="punch-tools">
+            <span class="punch-label">pdf size</span>
+            <button id="size-original" type="button" class="chip" aria-pressed="true">original</button>
+            <span class="punch-sides">
+                <label class="punch-side">w <input id="size-w" type="text" inputmode="decimal" aria-label="width, cm" /></label>
+                <span>×</span>
+                <label class="punch-side">h <input id="size-h" type="text" inputmode="decimal" aria-label="height, cm" /></label>
+                <span>cm</span>
+            </span>
+            <button id="download" type="button" class="button">download pdf</button>
+        </div>
+        <p id="size-note" class="punch-note" aria-live="polite"></p>
+
+        <div class="punch-stage">
+            <svg id="card" class="punch-card" role="img" aria-label="punch card preview" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+    </main>
+
+    
+</body>
+
+</html>

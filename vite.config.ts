@@ -5,16 +5,22 @@ import glsl from 'vite-plugin-glsl'
 
 const dist = path.join(__dirname, '.', 'dist')
 
-// Plugin to copy index.html to 404.html for SPA routing support
+// Every page is its own HTML entry, so each path gets a real 200 and only its own bundle:
+// the gallery and the editor never pull three, the logo pages never pull jsPDF.
+const pages = ['index.html', 'logo-black', 'logo-white', 'invert', 'punch-card', 'gallery']
+  .map((p) => path.resolve(__dirname, p.endsWith('.html') ? p : `${p}/index.html`))
+  .filter((p) => fs.existsSync(p))
+
+// Unknown paths fall back to the black logo, as every path did before the gallery.
 const copy404Plugin = () => {
   return {
     name: 'copy-404',
     writeBundle() {
-      const indexPath = path.join(dist, 'index.html')
+      const logoPath = path.join(dist, 'logo-black', 'index.html')
       const errorPagePath = path.join(dist, '404.html')
-      if (fs.existsSync(indexPath)) {
-        fs.copyFileSync(indexPath, errorPagePath)
-        console.log('✓ Copied index.html to 404.html for SPA routing')
+      if (fs.existsSync(logoPath)) {
+        fs.copyFileSync(logoPath, errorPagePath)
+        console.log('✓ Copied logo-black/index.html to 404.html')
       }
     }
   }
@@ -23,17 +29,25 @@ const copy404Plugin = () => {
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [glsl(), copy404Plugin()],
-  base: './',
+  // Absolute asset URLs: pages live in sub-folders (/logo-white/index.html …).
+  base: '/',
   server: {
     host: true,
-    https: {
-      key: fs.readFileSync(path.resolve(__dirname, 'localhost.key')),
-      cert: fs.readFileSync(path.resolve(__dirname, 'localhost.crt')),
-    },
+    // Local TLS certs are gitignored; serve plain http when they are absent.
+    https: fs.existsSync(path.resolve(__dirname, 'localhost.key'))
+      ? {
+          key: fs.readFileSync(path.resolve(__dirname, 'localhost.key')),
+          cert: fs.readFileSync(path.resolve(__dirname, 'localhost.crt')),
+        }
+      : false,
   },
   build: {
     outDir: dist,
+    emptyOutDir: true,
     target: 'es2020',
+    rollupOptions: {
+      input: pages,
+    },
   },
   // Handle client-side routing - serve index.html for all routes
   preview: {

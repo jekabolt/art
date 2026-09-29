@@ -1,0 +1,8 @@
+/* FeatureMono (grbpwr.com's type), cut to ASCII + ¢ ¬ — the characters a punch card can carry. */
+@font-face {
+    font-family: 'FeatureMono';
+    src: url('./FeatureMono-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: block;
+}
