@@ -164,9 +164,12 @@ const showMat = new ShaderMaterial({
     // oil-film rainbow: a cosine palette running through time and across the logo
     vec3 film(float t) { return 0.5 + 0.5 * cos(6.2831853 * (t + vec3(0.0, 0.33, 0.67))); }
 
+    // sample first, mask after: a texture read inside a branch has no reliable derivatives, and on
+    // real GPUs the square's edge then picks the smallest mip (the logo's average) — a dashed frame
     float ink(sampler2D tex, vec2 uv) {
-      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
-      return texture2D(tex, uv).a;
+      float a = texture2D(tex, uv).a;
+      vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+      return a * inside.x * inside.y;
     }
 
     // the ink turns to goo where it is disturbed: the crisp mark gives way to a blurred copy cut at
