@@ -3,7 +3,7 @@
 // the next. Each drawing picks its own order, entry points and directions, and its own hand: a slow
 // drift and a fine tremor, corners slightly rounded, the pen quick on the straights and slow into
 // the corners. A finished drawing keeps boiling (redrawn twelve times a second, as hand-drawn
-// animation does) and, when the next one starts, stays underneath as a faint ghost.
+// animation does) until the next one starts on a clean sheet.
 // Every tap makes the pen faster (×1.6, up to ×12); left alone it slows back to its own pace.
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './oneline.css'
@@ -303,28 +303,23 @@ function newDrawing(seed: number): Drawing {
 // --- rendering ---------------------------------------------------------------------------------------
 const canvas = document.getElementById('oneline') as HTMLCanvasElement
 const ctx = canvas.getContext('2d')!
-const ghosts = document.createElement('canvas')
-const gctx = ghosts.getContext('2d')!
 let dpr = 1
 let scale = 1
 let ox = 0
 let oy = 0
 
 const INK = '#f6f6f6'
-const GHOSTS = [0.16, 0.08, 0.04]
-let history: Drawing[] = []
 
 function resize() {
   const w = window.innerWidth
   const h = window.innerHeight
   dpr = Math.min(window.devicePixelRatio || 1, 2)
-  canvas.width = ghosts.width = Math.round(w * dpr)
-  canvas.height = ghosts.height = Math.round(h * dpr)
+  canvas.width = Math.round(w * dpr)
+  canvas.height = Math.round(h * dpr)
   const side = Math.min(w <= 768 ? 0.74 * w : 0.38 * w, 0.66 * h)
   scale = (side / LOGO_SPAN) * dpr
   ox = canvas.width / 2 - 300 * scale
   oy = canvas.height / 2 - 300 * scale
-  paintGhosts()
 }
 
 function trace(g: CanvasRenderingContext2D, d: Drawing, upto: number, boil: number) {
@@ -341,16 +336,6 @@ function trace(g: CanvasRenderingContext2D, d: Drawing, upto: number, boil: numb
   g.stroke()
 }
 
-function paintGhosts() {
-  gctx.clearRect(0, 0, ghosts.width, ghosts.height)
-  gctx.lineJoin = gctx.lineCap = 'round'
-  gctx.lineWidth = 1.3 * dpr
-  history.forEach((d, i) => {
-    gctx.strokeStyle = `rgba(246,246,246,${GHOSTS[i]})`
-    trace(gctx, d, Infinity, -1)
-  })
-}
-
 let seed = (Date.now() ^ (Math.random() * 1e9)) >>> 0
 let drawing = newDrawing(seed)
 let clock = 0 // seconds of drawing, at the pen's current speed
@@ -359,8 +344,6 @@ let lastFrame = performance.now()
 let doneAt = 0
 
 function next() {
-  history = [drawing, ...history].slice(0, GHOSTS.length)
-  paintGhosts()
   seed = (seed * 1664525 + 1013904223) >>> 0
   drawing = newDrawing(seed)
   clock = 0
@@ -391,7 +374,6 @@ function frame(now: number) {
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
-  ctx.drawImage(ghosts, 0, 0)
   ctx.lineJoin = ctx.lineCap = 'round'
   ctx.lineWidth = 1.5 * dpr
   ctx.strokeStyle = INK

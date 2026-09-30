@@ -1,6 +1,7 @@
 // MOIRÉ: two layers of fine black lines on white paper. In the lower layer the lines are shifted by
 // exactly half a period inside the logo; the upper layer is the same lines, moved by the pointer (or
-// drifting by itself; on a phone, tilted). Where the layers coincide the paper stays half grey; where they interleave it
+// drifting by itself; on a phone, tilted) — and the mark itself, a plate, leans a few degrees with
+// the same hand, for a little depth. Where the layers coincide the paper stays half grey; where they interleave it
 // goes solid — so the mark appears only through the overlap, and as the upper layer turns a degree
 // or slides a line, moiré fringes sweep the field and break at the mark's edge, showing it, hiding
 // it, turning it inside out. A tap changes the family of lines: straight, rings, a fan of rays.
@@ -11,6 +12,7 @@ import { Mesh } from 'three/src/objects/Mesh'
 import { PlaneGeometry } from 'three/src/geometries/PlaneGeometry'
 import { ShaderMaterial } from 'three/src/materials/ShaderMaterial'
 import { Vector2 } from 'three/src/math/Vector2'
+import { Vector3 } from 'three/src/math/Vector3'
 import { Vector4 } from 'three/src/math/Vector4'
 import { LOGO_STROKE } from '../core/logo-path'
 import { logoBars } from '../core/logo-bars'
@@ -36,7 +38,12 @@ const uniforms = {
   period: { value: 8 }, // device px between lines
   mode: { value: 0 }, // 0 lines, 1 rings, 2 rays
   hub: { value: 1000 }, // rays: the hub sits this far below the middle (device px), fanning the lines out
-  move: { value: new Vector4() }, // upper layer: turn, shift (in periods), centre x, centre y (device px from the middle)
+  move: { value: new Vector4() },
+  // the mark's plate, tipped a few degrees in space: its axes and normal (x right, y up, z away)
+  plateA: { value: new Vector3(1, 0, 0) },
+  plateB: { value: new Vector3(0, 1, 0) },
+  plateN: { value: new Vector3(0, 0, 1) },
+  eye: { value: 3000 }, // device px from the eye to the screen // upper layer: turn, shift (in periods), centre x, centre y (device px from the middle)
   bars: { value: bars.map((b) => b.c) },
   halves: { value: bars.map((b) => b.h) },
 }
@@ -54,6 +61,10 @@ const material = new ShaderMaterial({
     uniform int mode;
     uniform float hub;
     uniform vec4 move;
+    uniform vec3 plateA;
+    uniform vec3 plateB;
+    uniform vec3 plateN;
+    uniform float eye;
     uniform vec4 bars[NB];
     uniform vec2 halves[NB];
 
@@ -96,12 +107,24 @@ const material = new ShaderMaterial({
       return mix(DUTY, cov, smoothstep(2.5, 4.5, px));
     }
 
+    // where the ray from the eye through this pixel meets the tipped plate, in the plate's own px
+    vec2 onPlate(vec2 q) {
+      vec3 d = vec3(q, eye);
+      float t = eye * plateN.z / dot(d, plateN);
+      vec3 hit = vec3(0.0, 0.0, -eye) + t * d;
+      return vec2(dot(hit, plateA), dot(hit, plateB));
+    }
+
     void main() {
       vec2 q = gl_FragCoord.xy - 0.5 * resolution;
-      float mark = clamp(0.5 - logoSD(q / ppu) * ppu, 0.0, 1.0);
+      // the mark and its lines belong to the plate, so they lean with it; the sheet around stays flat
+      vec2 pq = onPlate(q);
+      float mark = clamp(0.5 - logoSD(pq / ppu) * ppu, 0.0, 1.0);
 
-      float base = phase(q, vec2(0.0), 0.0);
-      float lower = line(base + 0.5 * mark, fwidth(base));
+      float flat_ = phase(q, vec2(0.0), 0.0);
+      float tipped = phase(pq, vec2(0.0), 0.0);
+      float onMark = step(0.5, mark);
+      float lower = line(mix(flat_, tipped, onMark) + 0.5 * mark, mix(fwidth(flat_), fwidth(tipped), onMark));
 
       float up = phase(q, move.zw, move.x) + move.y;
       float upper = line(up, fwidth(up));
@@ -132,6 +155,7 @@ function resize() {
   // fine enough to shimmer, coarse enough to survive the screen: 4 css px on phones, 5 on desktop
   uniforms.period.value = (w <= 768 ? 4 : 5) * dpr
   uniforms.hub.value = 1.1 * h * dpr
+  uniforms.eye.value = 2.2 * Math.max(w, h) * dpr
 }
 
 // --- input: the pointer steers the upper layer; a tap changes the lines -------------------------------------
@@ -186,6 +210,22 @@ if (DOE && typeof DOE.requestPermission === 'function') {
   })
 } else if (DOE) window.addEventListener('deviceorientation', onTilt)
 
+// the plate tips with the same hand, a few degrees at most: just enough for depth
+const TIP = 0.075
+function tip(yaw: number, pitch: number) {
+  const c = Math.cos(yaw)
+  const s = Math.sin(yaw)
+  const cp = Math.cos(pitch)
+  const sp = Math.sin(pitch)
+  const rx = (v: number[]) => [v[0], v[1] * cp - v[2] * sp, v[1] * sp + v[2] * cp]
+  const a = rx([c, 0, -s])
+  const b = rx([0, 1, 0])
+  const n = rx([s, 0, c])
+  uniforms.plateA.value.set(a[0], a[1], a[2])
+  uniforms.plateB.value.set(b[0], b[1], b[2])
+  uniforms.plateN.value.set(n[0], n[1], n[2])
+}
+
 let last = performance.now()
 function frame(t: number) {
   const dt = Math.min(0.05, (t - last) / 1000)
@@ -205,6 +245,7 @@ function frame(t: number) {
   if (m === 0) uniforms.move.value.set(at.x * 0.09, at.y * 2, 0, 0) // turn up to ±5°, slide two lines
   else if (m === 1) uniforms.move.value.set(0, 0, at.x * p * 9, -at.y * p * 9) // rings: the centre wanders up to nine rings off
   else uniforms.move.value.set(at.x * 0.012, 0, 0, at.y * small * 0.12) // rays: the fan turns a little, its hub slides
+  tip(at.x * TIP, -at.y * TIP)
   renderer.render(scene, camera)
   requestAnimationFrame(frame)
 }
