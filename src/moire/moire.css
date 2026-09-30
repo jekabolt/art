@@ -11,5 +11,25 @@ canvas {
     width: 100vw;
     height: 100vh;
     touch-action: none;
+}
 
+.l-motion {
+    position: fixed;
+    left: 50%;
+    bottom: 32px;
+    transform: translateX(-50%);
+    height: 32px;
+    padding: 0 16px;
+    border: 1px solid #000;
+    border-radius: 0;
+    background: #fff;
+    color: #000;
+    font: 12px/1 ui-monospace, monospace;
+    text-transform: uppercase;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.l-motion.-none {
+    display: none;
 }

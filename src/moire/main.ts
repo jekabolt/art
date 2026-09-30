@@ -1,6 +1,6 @@
 // MOIRÉ: two layers of fine black lines on white paper. In the lower layer the lines are shifted by
 // exactly half a period inside the logo; the upper layer is the same lines, moved by the pointer (or
-// drifting by itself). Where the layers coincide the paper stays half grey; where they interleave it
+// drifting by itself; on a phone, tilted). Where the layers coincide the paper stays half grey; where they interleave it
 // goes solid — so the mark appears only through the overlap, and as the upper layer turns a degree
 // or slides a line, moiré fringes sweep the field and break at the mark's edge, showing it, hiding
 // it, turning it inside out. A tap changes the family of lines: straight, rings, a fan of rays.
@@ -88,7 +88,7 @@ const material = new ShaderMaterial({
     // lines DUTY of a period wide, antialiased by the phase's own slope; the slope comes from the smooth
     // phase, so the half-period jump at the mark stays crisp. Where lines crowd under three pixels
     // apart (the hub of the rays) they would alias into noise, so they fade to their average grey
-    const float DUTY = 0.36;
+    const float DUTY = 0.27;
     float line(float u, float slope) {
       float px = 1.0 / max(slope, 1e-4); // device px per period here
       float c = abs(fract(u - 0.5 * DUTY + 0.5) - 0.5); // periods from the nearest line's centre
@@ -129,8 +129,8 @@ function resize() {
   uniforms.resolution.value.set(w * dpr, h * dpr)
   const side = Math.min(w <= 768 ? 0.72 * w : 0.42 * w, 0.66 * h)
   uniforms.ppu.value = (side * dpr) / 516
-  // fine enough to shimmer, coarse enough to survive the screen: 4.5 css px on phones, 5.5 on desktop
-  uniforms.period.value = (w <= 768 ? 4.5 : 5.5) * dpr
+  // fine enough to shimmer, coarse enough to survive the screen: 4 css px on phones, 5 on desktop
+  uniforms.period.value = (w <= 768 ? 4 : 5) * dpr
   uniforms.hub.value = 1.1 * h * dpr
 }
 
@@ -156,6 +156,35 @@ canvas.addEventListener('pointerup', (e) => {
   if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) uniforms.mode.value = (uniforms.mode.value + 1) % 3
   down = null
 })
+
+// --- tilt: on a phone the upper layer follows the phone's tilt, measured from how it is held ------------
+const tilt = { on: false, b0: 0, g0: 0 }
+const clamp1 = (v: number) => Math.max(-1, Math.min(1, v))
+function onTilt(e: DeviceOrientationEvent) {
+  if (e.beta == null || e.gamma == null) return
+  if (!tilt.on) {
+    tilt.on = true
+    tilt.b0 = e.beta
+    tilt.g0 = e.gamma
+  }
+  // the neutral slowly follows the hand, so a phone held at any angle comes back to rest
+  tilt.b0 += (e.beta - tilt.b0) * 0.002
+  tilt.g0 += (e.gamma - tilt.g0) * 0.002
+  target.x = clamp1((e.gamma - tilt.g0) / 15) // ±15° sideways sweeps the whole range
+  target.y = clamp1((e.beta - tilt.b0) / 15)
+  lastInput = performance.now()
+}
+const motion = document.querySelector<HTMLButtonElement>('.l-motion')
+const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined
+if (DOE && typeof DOE.requestPermission === 'function') {
+  // iOS: motion only after a tap on the button
+  motion?.classList.remove('-none')
+  motion?.addEventListener('click', () => {
+    DOE.requestPermission!()
+      .then((r) => r === 'granted' && window.addEventListener('deviceorientation', onTilt))
+      .finally(() => motion.classList.add('-none'))
+  })
+} else if (DOE) window.addEventListener('deviceorientation', onTilt)
 
 let last = performance.now()
 function frame(t: number) {
