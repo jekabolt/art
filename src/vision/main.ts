@@ -3,10 +3,11 @@
 // so there are only the eight loud colours of a one-bit RGB: the strokes come out red with magenta
 // and white specks, their edge a yellow rim, the ground green blotches over black and dark blue,
 // with stray pixels. The map is recomputed eight times a second, like frames going through a
-// model. The mark itself is a flat plate turning in space in front of the camera — spinning about
-// its upright, nodding a little, seen in perspective, its back mirrored — so the strokes squeeze,
-// go edge-on and vanish into the ground, and come round again. The pointer is heat, burning the
-// ground yellow and white around it. A tap changes the resolution: 40, 80, 160 pixels across.
+// model. The mark itself is a flat plate in space in front of the camera, seen in perspective, its
+// back mirrored: a swipe turns it — sideways about its upright, up and down about the horizontal —
+// and it keeps turning a while after the finger lets go, so the strokes squeeze, go edge-on and
+// vanish into the ground. The pointer is heat, burning the ground yellow and white around it. A tap
+// changes the resolution: 40, 80, 160 pixels across.
 import { logoBars } from '../core/logo-bars'
 import { LOGO_STROKE } from '../core/logo-path'
 import './vision.css'
@@ -223,37 +224,80 @@ function toMap(e: PointerEvent) {
   heatTarget.on = 1
   lastMove = performance.now()
 }
-canvas.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'mouse' || e.buttons) toMap(e)
-})
+// --- turning the plate: a swipe turns it, and it coasts on after the release --------------------------------
+const turn = { spin: 0, nod: 0, vs: 0, vn: 0 } // radians, radians per second
 let down: { x: number; y: number } | null = null
+let drag: { x: number; y: number; t: number } | null = null
+const radPerPx = () => Math.PI / (plot.s / dpr) // a swipe across the plot turns it half round
+
 canvas.addEventListener('pointerdown', (e) => {
   down = { x: e.clientX, y: e.clientY }
+  drag = { x: e.clientX, y: e.clientY, t: performance.now() }
+  turn.vs = turn.vn = 0
+  canvas.setPointerCapture(e.pointerId)
   toMap(e)
 })
-canvas.addEventListener('pointerup', (e) => {
+canvas.addEventListener('pointermove', (e) => {
+  if (drag) {
+    const now = performance.now()
+    const ds = (e.clientX - drag.x) * radPerPx()
+    const dn = (e.clientY - drag.y) * radPerPx()
+    turn.spin += ds
+    turn.nod += dn
+    // the release speed, smoothed over the last few moves
+    const dt = Math.max(0.008, (now - drag.t) / 1000)
+    turn.vs = turn.vs * 0.5 + (ds / dt) * 0.5
+    turn.vn = turn.vn * 0.5 + (dn / dt) * 0.5
+    drag = { x: e.clientX, y: e.clientY, t: now }
+  }
+  if (e.pointerType === 'mouse' || e.buttons) toMap(e)
+})
+function release(e: PointerEvent) {
   if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) {
     resIndex = (resIndex + 1) % RESOLUTIONS.length
     setResolution()
+    turn.vs = turn.vn = 0
   }
+  // a finger that stopped before lifting leaves the plate still
+  if (drag && performance.now() - drag.t > 80) turn.vs = turn.vn = 0
   down = null
-})
+  drag = null
+}
+canvas.addEventListener('pointerup', release)
+canvas.addEventListener('pointercancel', release)
 canvas.addEventListener('pointerleave', () => (heatTarget.on = 0))
 
 let frameNo = 0
 let nextAt = 0
+let nextNoiseAt = 0
+let drawn = { spin: NaN, nod: NaN, res: -1 }
+let last = performance.now()
 function frame(now: number) {
+  const dt = Math.min(0.05, (now - last) / 1000)
+  last = now
+  if (!drag) {
+    turn.spin += turn.vs * dt
+    turn.nod += turn.vn * dt
+    const f = Math.exp(-dt / 1.2)
+    turn.vs *= f
+    turn.vn *= f
+  }
   if (now - lastMove > 1500) heatTarget.on = 0
   const k = 0.25
   heat.x += (heatTarget.x - heat.x) * k
   heat.y += (heatTarget.y - heat.y) * k
   heat.on += (heatTarget.on - heat.on) * 0.12
-  if (now >= nextAt) {
-    // eight frames a second, like a model working through a feed
+  // the noise flickers eight times a second, like a model working through a feed; while the plate
+  // turns the map is redrawn more often, so the swipe does not lag behind the finger
+  const moved = turn.spin !== drawn.spin || turn.nod !== drawn.nod || resIndex !== drawn.res
+  if (now >= nextAt || (moved && now >= nextAt - 125 + 33)) {
     nextAt = now + 125
-    frameNo++
-    const s = now / 1000
-    computeMap(RESOLUTIONS[resIndex], frameNo, heat, pose(s * 0.7, 0.32 * Math.sin(s * 0.45)), img)
+    if (now >= nextNoiseAt) {
+      nextNoiseAt = now + 125
+      frameNo++
+    }
+    drawn = { spin: turn.spin, nod: turn.nod, res: resIndex }
+    computeMap(RESOLUTIONS[resIndex], frameNo, heat, pose(turn.spin, turn.nod), img)
     sctx.putImageData(img, 0, 0)
     drawFigure()
   }
