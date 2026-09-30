@@ -42,7 +42,7 @@ const LOOK = {
   detail: { scale: 1.0, normal: 0.012, roughVar: 0.05, albedoVar: 0.03, wearWidth: 0.008, wearAmount: 0.1, aniso: 0.35, scratches: 0.6 },
   lens: { barrel: 0.05, ca: 0.0006, vignette: 0.07, sharpen: 0.22, sharpenClamp: 0.018 },
   // a fine, even sensor grain over the whole frame: no clouds, no colour blotches
-  noise: { glow: 0.0, base: 0.006, chroma: 0.0, fixed: 0.15, hz: 30 },
+  noise: { glow: 0.0, base: 0.011, chroma: 0.0, fixed: 0.15, hz: 30 },
   maxDpr: 2,
 }
 
@@ -167,6 +167,18 @@ sc.far = 8
 rig.add(sun)
 sun.target.position.set(0, 0.3, 0)
 rig.add(sun.target)
+// its twin, unlit, only for a blurred copy of the same shadow: the floor fades from the sharp one at the
+// contact to this one further out, as a real sun's penumbra widens with distance from the object
+const sunSoft = new THREE.DirectionalLight(0xffffff, 0)
+sunSoft.position.copy(sun.position)
+sunSoft.castShadow = true
+sunSoft.shadow.mapSize.set(1024, 1024)
+sunSoft.shadow.radius = 6
+sunSoft.shadow.blurSamples = 16
+sunSoft.shadow.bias = -0.0005
+Object.assign(sunSoft.shadow.camera, { left: -1.4, bottom: -1.4, right: 1.4, top: 1.4, near: 0.5, far: 8 })
+rig.add(sunSoft)
+sunSoft.target = sun.target
 void rect
 const lamp = new THREE.Object3D() // the backlit version's glow disc: gone, kept as a handle for the debug hook
 
@@ -419,11 +431,15 @@ steel.onBeforeCompile = (shader) => {
         float below = rib.z - vObjPos.y;
         float side = rib.x * (1.0 + below * rib.y); // the tip's half-side at this height
         float inner = 1.0 - smoothstep(side - 0.004, side - 0.0025, max(abs(vObjPos.x), abs(vObjPos.z)));
-        float deep = below < 0.172 ? 1.0 : step(dot(vObjNormal.xz, vObjPos.xz), 0.0) * step(below, 0.26); // under the logo section: the pockets' cone floors face the axis, the bullet's shoulder faces out
-        // and inside the bullet: where it rounds off the square's corners the turned surface is inside the square too
-        float round = 1.0 - smoothstep(-0.005, -0.003, rAx - (0.1106 + min(below, 0.172) * 0.0437));
-        float pocket = rib.w * inner * round * deep * smoothstep(0.0015, 0.005, below);
-        pocketAO = pocket * (0.85 + 0.15 * smoothstep(0.004, 0.03, below));
+        // the turned outer surface at this height (mm): the 2.5° cone over the logo section, the R3 shoulder under it
+        float zmm = 25.0 * (1.0 - below);
+        float rOut = (zmm >= 20.7 ? 2.765 + (25.0 - zmm) * 0.04366 : -0.05 + sqrt(max(0.0, 9.0 - (20.7 - zmm) * (20.7 - zmm)))) / 25.0;
+        float deep = (1.0 - smoothstep(rOut - 0.005, rOut - 0.003, rAx)) * step(below, 0.27);
+        // and inside the pockets' run-out cone (apex on the axis at z 19.2, r 3.44 at the logo section's base):
+        // below the section the ground flanks run on inside the square too, but outside this cone
+        deep *= 1.0 - smoothstep(-0.06, 0.0, rAx * 25.0 - (zmm - 19.2) * 2.29);
+        float pocket = rib.w * inner * deep * smoothstep(0.0015, 0.005, below);
+        pocketAO = pocket * (0.9 + 0.1 * smoothstep(0.004, 0.02, below));
       }
       // use marks: fine scratches, triplanar like the grain (the flats get them along the axis)
       float scr = texture2D(scratchMap, vObjPos.zy * 1.6 + vec2(0.31, 0.0)).r * tw.x + texture2D(scratchMap, vObjPos.xz * 1.6 + vec2(0.6, 0.2)).r * tw.y + texture2D(scratchMap, vObjPos.xy * 1.6 + vec2(0.05, 0.5)).r * tw.z;
@@ -441,7 +457,7 @@ steel.onBeforeCompile = (shader) => {
       `#include <lights_fragment_end>
       // in the pockets the room is shut out: darkening the albedo alone leaves the Fresnel/F90 sheen
       reflectedLight.indirectSpecular *= 1.0 - 0.97 * pocketAO;
-      reflectedLight.directSpecular *= 1.0 - 0.95 * pocketAO;`,
+      reflectedLight.directSpecular *= 1.0 - pocketAO; // no sun in there: nothing glints in the pockets`,
     )
     .replace(
       '#include <roughnessmap_fragment>',
@@ -582,6 +598,30 @@ function contactTexture() {
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ color: 0x23272e, opacity: 0.55, depthWrite: false }))
 floor.rotation.x = -Math.PI / 2
 floor.receiveShadow = true
+floor.material.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vW;')
+    .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;')
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vW;')
+    .replace(
+      'gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) );',
+      `float lit = 1.0;
+      #if NUM_DIR_LIGHT_SHADOWS > 1
+        DirectionalLightShadow s0 = directionalLightShadows[0];
+        DirectionalLightShadow s1 = directionalLightShadows[1];
+        float sharp = getShadow(directionalShadowMap[0], s0.shadowMapSize, s0.shadowBias, s0.shadowRadius, vDirectionalShadowCoord[0]);
+        float soft = getShadow(directionalShadowMap[1], s1.shadowMapSize, s1.shadowBias, s1.shadowRadius, vDirectionalShadowCoord[1]);
+        // how far from the bit's foot: crisp and dark at the contact, wider and lighter toward the tip's shadow
+        float t = smoothstep(0.1, 1.5, length(vW.xz));
+        lit = mix(sharp, soft, t);
+        float a = opacity * (1.0 - lit) * mix(1.15, 0.85, t);
+      #else
+        float a = opacity * (1.0 - getShadowMask());
+      #endif
+      gl_FragColor = vec4(color, a);`,
+    )
+}
 scene.add(floor)
 const contact = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ map: contactTexture(), transparent: true, depthWrite: false }))
 contact.rotation.x = -Math.PI / 2
