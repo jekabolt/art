@@ -6,8 +6,8 @@
 // model. The mark itself is a flat plate in space in front of the camera, seen in perspective, its
 // back mirrored: a swipe turns it — sideways about its upright, up and down about the horizontal —
 // and it keeps turning a while after the finger lets go, so the strokes squeeze, go edge-on and
-// vanish into the ground. The pointer is heat, burning the ground yellow and white around it. A tap
-// changes the resolution: 40, 80, 160 pixels across.
+// vanish into the ground. The pointer is heat, burning the ground yellow and white around it. The
+// map is 80 pixels across.
 import { logoBars } from '../core/logo-bars'
 import { LOGO_STROKE } from '../core/logo-path'
 import './vision.css'
@@ -60,8 +60,7 @@ function fbm(x: number, y: number, t: number) {
 }
 
 // --- the map ---------------------------------------------------------------------------------------------
-const RESOLUTIONS = [40, 80, 160]
-let resIndex = 1
+const RES = 80 // map pixels across
 const SPAN = 900 // logo units across the map: the mark small in the middle of a wide field
 
 const q = (v: number, levels: number) => Math.round(v * (levels - 1)) / (levels - 1)
@@ -159,8 +158,8 @@ let img = sctx.createImageData(1, 1)
 let dpr = 1
 let plot = { x: 0, y: 0, s: 1 } // device px
 
-function setResolution() {
-  const n = RESOLUTIONS[resIndex]
+function setupMap() {
+  const n = RES
   small.width = small.height = n
   img = sctx.createImageData(n, n)
 }
@@ -176,7 +175,7 @@ function resize() {
 }
 
 function drawFigure() {
-  const n = RESOLUTIONS[resIndex]
+  const n = RES
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -226,12 +225,10 @@ function toMap(e: PointerEvent) {
 }
 // --- turning the plate: a swipe turns it, and it coasts on after the release --------------------------------
 const turn = { spin: 0, nod: 0, vs: 0, vn: 0 } // radians, radians per second
-let down: { x: number; y: number } | null = null
 let drag: { x: number; y: number; t: number } | null = null
 const radPerPx = () => Math.PI / (plot.s / dpr) // a swipe across the plot turns it half round
 
 canvas.addEventListener('pointerdown', (e) => {
-  down = { x: e.clientX, y: e.clientY }
   drag = { x: e.clientX, y: e.clientY, t: performance.now() }
   turn.vs = turn.vn = 0
   canvas.setPointerCapture(e.pointerId)
@@ -252,15 +249,9 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (e.pointerType === 'mouse' || e.buttons) toMap(e)
 })
-function release(e: PointerEvent) {
-  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) {
-    resIndex = (resIndex + 1) % RESOLUTIONS.length
-    setResolution()
-    turn.vs = turn.vn = 0
-  }
+function release() {
   // a finger that stopped before lifting leaves the plate still
   if (drag && performance.now() - drag.t > 80) turn.vs = turn.vn = 0
-  down = null
   drag = null
 }
 canvas.addEventListener('pointerup', release)
@@ -270,7 +261,7 @@ canvas.addEventListener('pointerleave', () => (heatTarget.on = 0))
 let frameNo = 0
 let nextAt = 0
 let nextNoiseAt = 0
-let drawn = { spin: NaN, nod: NaN, res: -1 }
+let drawn = { spin: NaN, nod: NaN }
 let last = performance.now()
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000)
@@ -289,15 +280,15 @@ function frame(now: number) {
   heat.on += (heatTarget.on - heat.on) * 0.12
   // the noise flickers eight times a second, like a model working through a feed; while the plate
   // turns the map is redrawn more often, so the swipe does not lag behind the finger
-  const moved = turn.spin !== drawn.spin || turn.nod !== drawn.nod || resIndex !== drawn.res
+  const moved = turn.spin !== drawn.spin || turn.nod !== drawn.nod
   if (now >= nextAt || (moved && now >= nextAt - 125 + 33)) {
     nextAt = now + 125
     if (now >= nextNoiseAt) {
       nextNoiseAt = now + 125
       frameNo++
     }
-    drawn = { spin: turn.spin, nod: turn.nod, res: resIndex }
-    computeMap(RESOLUTIONS[resIndex], frameNo, heat, pose(turn.spin, turn.nod), img)
+    drawn = { spin: turn.spin, nod: turn.nod }
+    computeMap(RES, frameNo, heat, pose(turn.spin, turn.nod), img)
     sctx.putImageData(img, 0, 0)
     drawFigure()
   }
@@ -308,6 +299,6 @@ window.addEventListener('resize', () => {
   resize()
   drawFigure()
 })
-setResolution()
+setupMap()
 resize()
 requestAnimationFrame(frame)

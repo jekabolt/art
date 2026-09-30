@@ -3,7 +3,7 @@
 // from it, the older the moment it shows — up to three seconds back. Held still, the mark is itself;
 // dragged, it stretches and bends into the path it has taken, like the long fingers of a hand typing
 // in front of a slit camera, and it swings a little as it goes, which twists the smear. Left alone it
-// wanders on its own; on a phone it also follows the tilt. A tap turns the slit: across (lines),
+// wanders on its own. A tap turns the slit: across (lines),
 // upright (columns), or round (rings from the mark's middle, so a turn becomes a spiral).
 //
 // One fragment shader. The mark's recent positions and angles live in a small float texture, one
@@ -159,32 +159,6 @@ canvas.addEventListener('pointerup', (e) => {
   down = null
 })
 
-// tilt on a phone: the mark rolls toward the low side
-const tilt = { on: false, x: 0, y: 0, b0: 0, g0: 0 }
-function onTilt(e: DeviceOrientationEvent) {
-  if (e.beta == null || e.gamma == null) return
-  if (!tilt.on) {
-    tilt.on = true
-    tilt.b0 = e.beta
-    tilt.g0 = e.gamma
-  }
-  tilt.b0 += (e.beta - tilt.b0) * 0.002
-  tilt.g0 += (e.gamma - tilt.g0) * 0.002
-  tilt.x = Math.max(-1, Math.min(1, (e.gamma - tilt.g0) / 20))
-  tilt.y = Math.max(-1, Math.min(1, (e.beta - tilt.b0) / 20))
-}
-const motion = document.querySelector<HTMLButtonElement>('.l-motion')
-const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined
-const touch = window.matchMedia('(pointer: coarse)').matches
-if (touch && DOE && typeof DOE.requestPermission === 'function') {
-  motion?.classList.remove('-none')
-  motion?.addEventListener('click', () => {
-    DOE.requestPermission!()
-      .then((r) => r === 'granted' && window.addEventListener('deviceorientation', onTilt))
-      .finally(() => motion.classList.add('-none'))
-  })
-} else if (touch && DOE) window.addEventListener('deviceorientation', onTilt)
-
 let head = 0
 function record() {
   head = (head + 1) % HIST
@@ -210,10 +184,10 @@ function frame(t: number) {
   const dt = Math.min(0.05, (t - last) / 1000)
   last = t
   if (t - lastInput > 2500) {
-    // nobody is steering: a slow wander, pulled by the tilt when there is one
+    // nobody is steering: a slow wander
     const s = t / 1000
-    target.x = Math.sin(s * 0.53) * w * 0.22 + tilt.x * w * 0.3
-    target.y = Math.sin(s * 0.37 + 1.2) * h * 0.18 + tilt.y * h * 0.3
+    target.x = Math.sin(s * 0.53) * w * 0.22
+    target.y = Math.sin(s * 0.37 + 1.2) * h * 0.18
   }
   // a soft spring, a little under-damped: the mark overshoots and settles
   const k = 38
