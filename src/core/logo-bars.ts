@@ -6,7 +6,7 @@ import { LOGO_PATH, LOGO_STROKE } from './logo-path'
 export type Seg = { ax: number; ay: number; bx: number; by: number }
 
 /** The logo path (absolute M/H/V/L only) as straight segments; collinear runs merged into one bar. */
-function pathSegments(): Seg[] {
+export function pathSegments(): Seg[] {
   const tokens = LOGO_PATH.match(/[MHVL]|-?\d*\.?\d+/g)!
   const segs: Seg[] = []
   let x = 0
