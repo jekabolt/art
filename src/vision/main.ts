@@ -3,8 +3,10 @@
 // so there are only the eight loud colours of a one-bit RGB: the strokes come out red with magenta
 // and white specks, their edge a yellow rim, the ground green blotches over black and dark blue,
 // with stray pixels. The map is recomputed eight times a second, like frames going through a
-// model; the pointer is heat, burning the ground yellow and white around it. A tap changes the
-// resolution: 30, 60, 120 pixels across.
+// model. The mark itself is a flat plate turning in space in front of the camera — spinning about
+// its upright, nodding a little, seen in perspective, its back mirrored — so the strokes squeeze,
+// go edge-on and vanish into the ground, and come round again. The pointer is heat, burning the
+// ground yellow and white around it. A tap changes the resolution: 40, 80, 160 pixels across.
 import { logoBars } from '../core/logo-bars'
 import { LOGO_STROKE } from '../core/logo-path'
 import './vision.css'
@@ -57,13 +59,42 @@ function fbm(x: number, y: number, t: number) {
 }
 
 // --- the map ---------------------------------------------------------------------------------------------
-const RESOLUTIONS = [30, 60, 120]
+const RESOLUTIONS = [40, 80, 160]
 let resIndex = 1
-const SPAN = 600 // logo units across the map: the mark and a margin
+const SPAN = 900 // logo units across the map: the mark small in the middle of a wide field
 
 const q = (v: number, levels: number) => Math.round(v * (levels - 1)) / (levels - 1)
 
-function computeMap(n: number, frameNo: number, heat: { x: number; y: number; on: number }, img: ImageData) {
+// --- the plate in space: rotation about the upright (spin), then a nod about the horizontal ---------------
+const EYE = 1500 // logo units from the eye to the plate's centre
+type Pose = { a: number[]; b: number[]; n: number[] }
+function pose(spin: number, nod: number): Pose {
+  const c = Math.cos(spin)
+  const s = Math.sin(spin)
+  const cn = Math.cos(nod)
+  const sn = Math.sin(nod)
+  const rx = (v: number[]) => [v[0], v[1] * cn - v[2] * sn, v[1] * sn + v[2] * cn]
+  return { a: rx([c, 0, -s]), b: rx([0, 1, 0]), n: rx([s, 0, c]) }
+}
+
+// where the ray from the eye through a map point (logo units from the middle) meets the plate, as a
+// point of the logo, and the signed distance to the strokes measured on screen
+function onPlate(X: number, Y: number, p: Pose) {
+  const dn = X * p.n[0] + Y * p.n[1] + EYE * p.n[2]
+  if (Math.abs(dn) < 1e-6) return { d: Infinity, u: 0, v: 0 }
+  const t = (EYE * p.n[2]) / dn // the eye at (0, 0, -EYE), looking through the map at z = 0
+  if (t <= 0) return { d: Infinity, u: 0, v: 0 }
+  const hx = t * X
+  const hy = t * Y
+  const hz = -EYE + t * EYE
+  const u = hx * p.a[0] + hy * p.a[1] + hz * p.a[2] + 300
+  const v = hx * p.b[0] + hy * p.b[1] + hz * p.b[2] + 300
+  // logo units to map units here: perspective shrink, and the slant (roughly, the root of the cosine)
+  const k = (EYE / (EYE + hz)) * Math.sqrt(Math.abs(dn) / Math.hypot(X, Y, EYE))
+  return { d: sd(u, v) * k, u, v }
+}
+
+function computeMap(n: number, frameNo: number, heat: { x: number; y: number; on: number }, p: Pose, img: ImageData) {
   const cell = SPAN / n
   const t = frameNo * 0.06
   const buf = img.data
@@ -71,16 +102,17 @@ function computeMap(n: number, frameNo: number, heat: { x: number; y: number; on
     for (let i = 0; i < n; i++) {
       const x = (i + 0.5) * cell
       const y = (j + 0.5) * cell
-      const d = sd(x, y)
+      const hit = onPlate(x - SPAN / 2, y - SPAN / 2, p)
+      const d = hit.d
       const h = hash(i, j, frameNo) // flicker, per frame
       const hot = heat.on * Math.exp(-((x - heat.x) ** 2 + (y - heat.y) ** 2) / (130 * 130))
       let r = 0
       let g = 0
       let b = 0
-      const edge = Math.max(cell * 0.9, 8)
+      const edge = cell * 0.6 // the rim: about a pixel of the map
       if (d < -edge * 0.6) {
         // the strokes: red, with magenta clusters and white where it runs hot
-        const m = fbm(x / 40, y / 40, t * 1.5)
+        const m = fbm(hit.u / 40, hit.v / 40, t * 1.5)
         r = 1
         if (m + hot * 0.6 > 0.72 || h > 0.93) g = b = 1
         else if (m > 0.55 || h > 0.8) b = 1
@@ -156,7 +188,7 @@ function drawFigure() {
   ctx.fillStyle = '#000'
   ctx.lineWidth = lw
   ctx.strokeRect(plot.x - lw / 2, plot.y - lw / 2, plot.s + lw, plot.s + lw)
-  const step = n <= 30 ? 5 : n <= 60 ? 10 : 20
+  const step = n <= 40 ? 5 : n <= 80 ? 10 : 20
   const tick = 4.5 * dpr
   ctx.font = `${Math.round(11 * dpr)}px "DejaVu Sans", "Helvetica Neue", Arial, sans-serif`
   const px = plot.s / n
@@ -182,8 +214,8 @@ function drawFigure() {
 }
 
 // --- input and loop -------------------------------------------------------------------------------------
-const heat = { x: 300, y: 300, on: 0 }
-const heatTarget = { x: 300, y: 300, on: 0 }
+const heat = { x: SPAN / 2, y: SPAN / 2, on: 0 }
+const heatTarget = { x: SPAN / 2, y: SPAN / 2, on: 0 }
 let lastMove = -1e9
 function toMap(e: PointerEvent) {
   heatTarget.x = ((e.clientX * dpr - plot.x) / plot.s) * SPAN
@@ -220,7 +252,8 @@ function frame(now: number) {
     // eight frames a second, like a model working through a feed
     nextAt = now + 125
     frameNo++
-    computeMap(RESOLUTIONS[resIndex], frameNo, heat, img)
+    const s = now / 1000
+    computeMap(RESOLUTIONS[resIndex], frameNo, heat, pose(s * 0.7, 0.32 * Math.sin(s * 0.45)), img)
     sctx.putImageData(img, 0, 0)
     drawFigure()
   }

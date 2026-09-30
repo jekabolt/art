@@ -1,0 +1,185 @@
+// MOIRÉ: two layers of fine black lines on white paper. In the lower layer the lines are shifted by
+// exactly half a period inside the logo; the upper layer is the same lines, moved by the pointer (or
+// drifting by itself). Where the layers coincide the paper stays half grey; where they interleave it
+// goes solid — so the mark appears only through the overlap, and as the upper layer turns a degree
+// or slides a line, moiré fringes sweep the field and break at the mark's edge, showing it, hiding
+// it, turning it inside out. A tap changes the family of lines: straight, rings, a fan of rays.
+import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
+import { Scene } from 'three/src/scenes/Scene'
+import { OrthographicCamera } from 'three/src/cameras/OrthographicCamera'
+import { Mesh } from 'three/src/objects/Mesh'
+import { PlaneGeometry } from 'three/src/geometries/PlaneGeometry'
+import { ShaderMaterial } from 'three/src/materials/ShaderMaterial'
+import { Vector2 } from 'three/src/math/Vector2'
+import { Vector4 } from 'three/src/math/Vector4'
+import { LOGO_STROKE } from '../core/logo-path'
+import { logoBars } from '../core/logo-bars'
+import './moire.css'
+
+const bars = logoBars().map((s) => {
+  const ax = s.ax - 300
+  const ay = 300 - s.ay
+  const bx = s.bx - 300
+  const by = 300 - s.by
+  const len = Math.hypot(bx - ax, by - ay)
+  return { c: new Vector4((ax + bx) / 2, (ay + by) / 2, (bx - ax) / len, (by - ay) / len), h: new Vector2(len / 2, LOGO_STROKE / 2) }
+})
+
+const canvas = document.getElementById('moire') as HTMLCanvasElement
+const renderer = new WebGLRenderer({ canvas, antialias: false })
+const scene = new Scene()
+const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1)
+
+const uniforms = {
+  resolution: { value: new Vector2() },
+  ppu: { value: 1 }, // device px per logo unit
+  period: { value: 8 }, // device px between lines
+  mode: { value: 0 }, // 0 lines, 1 rings, 2 rays
+  hub: { value: 1000 }, // rays: the hub sits this far below the middle (device px), fanning the lines out
+  move: { value: new Vector4() }, // upper layer: turn, shift (in periods), centre x, centre y (device px from the middle)
+  bars: { value: bars.map((b) => b.c) },
+  halves: { value: bars.map((b) => b.h) },
+}
+
+const material = new ShaderMaterial({
+  uniforms,
+  defines: { NB: bars.length },
+  vertexShader: /* glsl */ `
+    void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform vec2 resolution;
+    uniform float ppu;
+    uniform float period;
+    uniform int mode;
+    uniform float hub;
+    uniform vec4 move;
+    uniform vec4 bars[NB];
+    uniform vec2 halves[NB];
+
+    const vec3 PAPER = vec3(0.965);
+    const vec3 INK = vec3(0.0);
+
+    float logoSD(vec2 p) {
+      float d = 1e9;
+      for (int i = 0; i < NB; i++) {
+        vec4 b = bars[i];
+        vec2 r = p - b.xy;
+        vec2 l = vec2(dot(r, b.zw), dot(r, vec2(-b.w, b.z)));
+        vec2 q = abs(l) - halves[i];
+        d = min(d, length(max(q, 0.0)) + min(max(q.x, q.y), 0.0));
+      }
+      return d;
+    }
+
+    // the line pattern's phase at pixel position q (device px from the middle), in periods
+    float phase(vec2 q, vec2 centre, float turn) {
+      if (mode == 0) {
+        float c = cos(turn);
+        float s = sin(turn);
+        return (c * q.x + s * q.y) / period;
+      }
+      if (mode == 1) return length(q - centre) / period;
+      // rays from a hub far below, as many as it takes for them to be a period apart across the mark
+      vec2 r = q - centre + vec2(0.0, hub);
+      return (atan(r.x, r.y) + turn) * hub / period;
+    }
+
+    // lines DUTY of a period wide, antialiased by the phase's own slope; the slope comes from the smooth
+    // phase, so the half-period jump at the mark stays crisp. Where lines crowd under three pixels
+    // apart (the hub of the rays) they would alias into noise, so they fade to their average grey
+    const float DUTY = 0.36;
+    float line(float u, float slope) {
+      float px = 1.0 / max(slope, 1e-4); // device px per period here
+      float c = abs(fract(u - 0.5 * DUTY + 0.5) - 0.5); // periods from the nearest line's centre
+      float cov = clamp(0.5 - (c - 0.5 * DUTY) * px, 0.0, 1.0);
+      return mix(DUTY, cov, smoothstep(2.5, 4.5, px));
+    }
+
+    void main() {
+      vec2 q = gl_FragCoord.xy - 0.5 * resolution;
+      float mark = clamp(0.5 - logoSD(q / ppu) * ppu, 0.0, 1.0);
+
+      float base = phase(q, vec2(0.0), 0.0);
+      float lower = line(base + 0.5 * mark, fwidth(base));
+
+      float up = phase(q, move.zw, move.x) + move.y;
+      float upper = line(up, fwidth(up));
+
+      // two transparencies over each other: ink wherever either has a line
+      float ink = 1.0 - (1.0 - lower) * (1.0 - upper);
+      gl_FragColor = vec4(mix(PAPER, INK, ink), 1.0);
+    }
+  `,
+})
+const quad = new Mesh(new PlaneGeometry(2, 2), material)
+quad.frustumCulled = false
+scene.add(quad)
+
+// --- size ---------------------------------------------------------------------------------------------
+let dpr = 1
+let w = 1
+let h = 1
+function resize() {
+  w = window.innerWidth
+  h = window.innerHeight
+  dpr = Math.min(window.devicePixelRatio || 1, 2)
+  renderer.setPixelRatio(dpr)
+  renderer.setSize(w, h, false)
+  uniforms.resolution.value.set(w * dpr, h * dpr)
+  const side = Math.min(w <= 768 ? 0.72 * w : 0.42 * w, 0.66 * h)
+  uniforms.ppu.value = (side * dpr) / 516
+  // fine enough to shimmer, coarse enough to survive the screen: 4.5 css px on phones, 5.5 on desktop
+  uniforms.period.value = (w <= 768 ? 4.5 : 5.5) * dpr
+  uniforms.hub.value = 1.1 * h * dpr
+}
+
+// --- input: the pointer steers the upper layer; a tap changes the lines -------------------------------------
+const target = { x: 0, y: 0 }
+const at = { x: 0, y: 0 }
+let lastInput = -1e9
+let down: { x: number; y: number } | null = null
+
+function aim(e: PointerEvent) {
+  target.x = (e.clientX / w) * 2 - 1
+  target.y = (e.clientY / h) * 2 - 1
+  lastInput = performance.now()
+}
+canvas.addEventListener('pointerdown', (e) => {
+  down = { x: e.clientX, y: e.clientY }
+  aim(e)
+})
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse' || e.buttons) aim(e)
+})
+canvas.addEventListener('pointerup', (e) => {
+  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) uniforms.mode.value = (uniforms.mode.value + 1) % 3
+  down = null
+})
+
+let last = performance.now()
+function frame(t: number) {
+  const dt = Math.min(0.05, (t - last) / 1000)
+  last = t
+  if (t - lastInput > 3000) {
+    // nobody is steering: drift slowly through the fringes
+    const s = t / 1000
+    target.x = Math.sin(s * 0.11) * 0.5
+    target.y = Math.sin(s * 0.07 + 1.1) * 0.5
+  }
+  const k = 1 - Math.exp(-dt * 4)
+  at.x += (target.x - at.x) * k
+  at.y += (target.y - at.y) * k
+  const m = uniforms.mode.value
+  const small = Math.min(w, h) * dpr
+  const p = uniforms.period.value
+  if (m === 0) uniforms.move.value.set(at.x * 0.09, at.y * 2, 0, 0) // turn up to ±5°, slide two lines
+  else if (m === 1) uniforms.move.value.set(0, 0, at.x * p * 9, -at.y * p * 9) // rings: the centre wanders up to nine rings off
+  else uniforms.move.value.set(at.x * 0.012, 0, 0, at.y * small * 0.12) // rays: the fan turns a little, its hub slides
+  renderer.render(scene, camera)
+  requestAnimationFrame(frame)
+}
+
+window.addEventListener('resize', resize)
+resize()
+requestAnimationFrame(frame)
