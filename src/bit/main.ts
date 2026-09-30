@@ -39,7 +39,7 @@ const LOOK = {
   bloom: { threshold: 6.2, strength: 0.12, radius: 0.55 },
   steel: { color: 0xc8ccd1, roughness: 0.1, envMapIntensity: 1.0 }, // the tip and neck: ground and polished bright
   hex: { color: 0x5b5f65, roughness: 0.3, from: 0.593, blend: 0.008 }, // the shank: darker satin (oxide over a light blast), up to `from` of the height
-  detail: { scale: 1.0, normal: 0.012, roughVar: 0.05, albedoVar: 0.03, wearWidth: 0.008, wearAmount: 0.1, aniso: 0.35, scratches: 0.6 },
+  detail: { scale: 1.0, normal: 0.012, roughVar: 0.05, albedoVar: 0.03, wearWidth: 0.012, wearAmount: 0.35, aniso: 0.35, scratches: 0.9 },
   lens: { barrel: 0.05, ca: 0.0006, vignette: 0.07, sharpen: 0.22, sharpenClamp: 0.018 },
   // a fine, even sensor grain over the whole frame: no clouds, no colour blotches
   noise: { glow: 0.0, base: 0.011, chroma: 0.0, fixed: 0.15, hz: 30 },
@@ -322,8 +322,11 @@ function scratchTexture() {
   let seed = 1234567
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
   g.lineCap = 'round'
-  for (let i = 0; i < 170; i++) {
-    const along = rnd() < 0.8
+  g.globalCompositeOperation = 'lighter' // R: bright scratches, G: dark gouges, drawn into separate channels
+  for (let i = 0; i < 260; i++) {
+    const gouge = i >= 200 // the last few: fewer, shorter, darker
+    const ch = gouge ? '0,255,0' : '255,0,0'
+    const along = rnd() < 0.75
     const ang = along ? Math.PI / 2 + (rnd() - 0.5) * 0.35 : rnd() * Math.PI
     const len = (along ? 60 + rnd() * 260 : 12 + rnd() * 70) * (rnd() < 0.15 ? 1.8 : 1)
     const x = rnd() * N
@@ -332,12 +335,12 @@ function scratchTexture() {
     const dy = Math.sin(ang) * len
     const grad = g.createLinearGradient(x, y, x + dx, y + dy)
     const a = 0.25 + rnd() * 0.55
-    grad.addColorStop(0, 'rgba(255,255,255,0)')
-    grad.addColorStop(0.2 + rnd() * 0.2, `rgba(255,255,255,${a})`)
-    grad.addColorStop(0.7 + rnd() * 0.2, `rgba(255,255,255,${a * 0.6})`)
-    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    grad.addColorStop(0, `rgba(${ch},0)`)
+    grad.addColorStop(0.2 + rnd() * 0.2, `rgba(${ch},${a})`)
+    grad.addColorStop(0.7 + rnd() * 0.2, `rgba(${ch},${a * 0.6})`)
+    grad.addColorStop(1, `rgba(${ch},0)`)
     g.strokeStyle = grad
-    g.lineWidth = rnd() < 0.85 ? 0.7 + rnd() * 0.6 : 1.4 + rnd() * 0.8
+    g.lineWidth = gouge ? 2.5 + rnd() * 2.5 : rnd() < 0.7 ? 1.3 + rnd() * 1.0 : 2.4 + rnd() * 1.6
     g.beginPath()
     g.moveTo(x, y)
     g.lineTo(x + dx, y + dy)
@@ -437,32 +440,34 @@ steel.onBeforeCompile = (shader) => {
         float deep = (1.0 - smoothstep(rOut - 0.005, rOut - 0.003, rAx)) * step(below, 0.27);
         // and inside the pockets' run-out cone (apex on the axis at z 19.2, r 3.44 at the logo section's base):
         // below the section the ground flanks run on inside the square too, but outside this cone
-        deep *= 1.0 - smoothstep(-0.06, 0.0, rAx * 25.0 - (zmm - 19.2) * 2.29);
+        deep *= 1.0 - smoothstep(0.1, 0.25, rAx * 25.0 - (zmm - 19.2) * 2.29); // the floors lie on it: a little past it still counts
         float pocket = rib.w * inner * deep * smoothstep(0.0015, 0.005, below);
-        pocketAO = pocket * (0.9 + 0.1 * smoothstep(0.004, 0.02, below));
+        float floorF = smoothstep(0.35, 0.8, normalize(vObjNormal).y); // floors face up, out of the light's reach
+        pocketAO = pocket * max(0.3 + 0.66 * smoothstep(0.0, 0.045, below), 0.95 * floorF);
       }
       // use marks: fine scratches, triplanar like the grain (the flats get them along the axis)
-      float scr = texture2D(scratchMap, vObjPos.zy * 1.6 + vec2(0.31, 0.0)).r * tw.x + texture2D(scratchMap, vObjPos.xz * 1.6 + vec2(0.6, 0.2)).r * tw.y + texture2D(scratchMap, vObjPos.xy * 1.6 + vec2(0.05, 0.5)).r * tw.z;
-      scr *= scratches;
+      vec2 sm = texture2D(scratchMap, vObjPos.zy * 1.3 + vec2(0.31, 0.0)).rg * tw.x + texture2D(scratchMap, vObjPos.xz * 1.3 + vec2(0.6, 0.2)).rg * tw.y + texture2D(scratchMap, vObjPos.xy * 1.3 + vec2(0.05, 0.5)).rg * tw.z;
+      float scr = sm.r * scratches;
+      float gouge = sm.g * scratches;
       // wear: the sharp edges, worn smoother and brighter, patchily
       float edgeD = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
       float wear = (1.0 - smoothstep(0.0, wearWidth, edgeD)) * smoothstep(0.25, 0.8, det.a + 0.25) * wearAmount;
       // two finishes: the satin hex shank, the polished neck and tip
       float onHex = 1.0 - smoothstep(hexZone.x - hexZone.y, hexZone.x + hexZone.y, vObjPos.y);
       diffuseColor.rgb = mix(diffuseColor.rgb, hexColor, onHex);
-      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity) * (1.0 + 0.55 * scr) * (1.0 - 0.7 * pocketAO);`,
+      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity) * (1.0 + 0.55 * scr) * (1.0 - 0.5 * gouge) * (1.0 - 0.7 * pocketAO);`,
     )
     .replace(
       '#include <lights_fragment_end>',
       `#include <lights_fragment_end>
       // in the pockets the room is shut out: darkening the albedo alone leaves the Fresnel/F90 sheen
-      reflectedLight.indirectSpecular *= 1.0 - 0.97 * pocketAO;
-      reflectedLight.directSpecular *= 1.0 - pocketAO; // no sun in there: nothing glints in the pockets`,
+      reflectedLight.indirectSpecular *= 1.0 - 0.95 * pocketAO;
+      reflectedLight.directSpecular *= 1.0 - min(1.0, 1.5 * pocketAO); // the sun only on the walls' top edge: nothing glints deep in the pockets`,
     )
     .replace(
       '#include <roughnessmap_fragment>',
       `#include <roughnessmap_fragment>
-      roughnessFactor = clamp(mix(roughnessFactor, hexRough, onHex) + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear + 0.45 * cavity + 0.22 * scr + 0.3 * pocketAO, 0.08, 1.0);`,
+      roughnessFactor = clamp(mix(roughnessFactor, hexRough, onHex) + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear + 0.45 * cavity + 0.22 * scr + 0.35 * gouge + 0.3 * pocketAO, 0.08, 1.0);`,
     )
     .replace(
       '#include <normal_fragment_maps>',
