@@ -200,7 +200,8 @@ function onTilt(e: DeviceOrientationEvent) {
 }
 const motion = document.querySelector<HTMLButtonElement>('.l-motion')
 const DOE = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined
-if (DOE && typeof DOE.requestPermission === 'function') {
+const touch = window.matchMedia('(pointer: coarse)').matches
+if (touch && DOE && typeof DOE.requestPermission === 'function') {
   // iOS: motion only after a tap on the button
   motion?.classList.remove('-none')
   motion?.addEventListener('click', () => {
@@ -208,7 +209,7 @@ if (DOE && typeof DOE.requestPermission === 'function') {
       .then((r) => r === 'granted' && window.addEventListener('deviceorientation', onTilt))
       .finally(() => motion.classList.add('-none'))
   })
-} else if (DOE) window.addEventListener('deviceorientation', onTilt)
+} else if (touch && DOE) window.addEventListener('deviceorientation', onTilt)
 
 // the plate tips with the same hand, a few degrees at most: just enough for depth
 const TIP = 0.075
