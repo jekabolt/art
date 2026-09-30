@@ -461,8 +461,8 @@ steel.onBeforeCompile = (shader) => {
       '#include <lights_fragment_end>',
       `#include <lights_fragment_end>
       // in the pockets the room is shut out: darkening the albedo alone leaves the Fresnel/F90 sheen
-      reflectedLight.indirectSpecular *= 1.0 - 0.95 * pocketAO;
-      reflectedLight.directSpecular *= 1.0 - min(1.0, 1.5 * pocketAO); // the sun only on the walls' top edge: nothing glints deep in the pockets`,
+      reflectedLight.indirectSpecular *= (1.0 - 0.95 * pocketAO) * (1.0 - 0.5 * cavity);
+      reflectedLight.directSpecular *= (1.0 - min(1.0, 1.5 * pocketAO)) * (1.0 - 0.9 * cavity); // the engraving's cut walls don't flash either // the sun only on the walls' top edge: nothing glints deep in the pockets`,
     )
     .replace(
       '#include <roughnessmap_fragment>',
