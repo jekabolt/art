@@ -353,9 +353,41 @@ function scratchTexture() {
       g.stroke()
     }
   }
-  const t = new THREE.CanvasTexture(c)
+  // the marks are grooves, not paint: a height field (gouges deeper), softened to a V profile, whose slopes
+  // bend the normal so each groove has a lit wall and a shaded one. R,G = slope, B = scratch, A = gouge
+  const src = g.getImageData(0, 0, N, N).data
+  let h = new Float32Array(N * N)
+  for (let i = 0; i < N * N; i++) h[i] = -(src[i * 4] * 0.6 + src[i * 4 + 1]) / 255
+  for (let pass = 0; pass < 2; pass++) {
+    const o = new Float32Array(N * N)
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        let acc = 0
+        for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) acc += h[((y + j + N) % N) * N + ((x + k + N) % N)]
+        o[y * N + x] = acc / 9
+      }
+    h = o
+  }
+  const data = new Uint8Array(N * N * 4)
+  const K = 2.5
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x
+      const nx = -(h[y * N + ((x + 1) % N)] - h[y * N + ((x - 1 + N) % N)]) * K
+      const ny = -(h[((y + 1) % N) * N + x] - h[((y - 1 + N) % N) * N + x]) * K
+      const nl = Math.sqrt(nx * nx + ny * ny + 1)
+      data[i * 4] = (nx / nl) * 127.5 + 127.5
+      data[i * 4 + 1] = (ny / nl) * 127.5 + 127.5
+      data[i * 4 + 2] = src[i * 4]
+      data[i * 4 + 3] = src[i * 4 + 1]
+    }
+  const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat)
   t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.minFilter = THREE.LinearMipmapLinearFilter
+  t.magFilter = THREE.LinearFilter
+  t.generateMipmaps = true
   t.anisotropy = 8
+  t.needsUpdate = true
   return t
 }
 
@@ -446,16 +478,21 @@ steel.onBeforeCompile = (shader) => {
         pocketAO = pocket * max(0.3 + 0.66 * smoothstep(0.0, 0.045, below), 0.95 * floorF);
       }
       // use marks: fine scratches, triplanar like the grain (the flats get them along the axis)
-      vec2 sm = texture2D(scratchMap, vObjPos.zy * 1.3 + vec2(0.31, 0.0)).rg * tw.x + texture2D(scratchMap, vObjPos.xz * 1.3 + vec2(0.6, 0.2)).rg * tw.y + texture2D(scratchMap, vObjPos.xy * 1.3 + vec2(0.05, 0.5)).rg * tw.z;
-      float scr = sm.r * scratches;
-      float gouge = sm.g * scratches;
+      vec4 sX = texture2D(scratchMap, vObjPos.zy * 1.3 + vec2(0.31, 0.0));
+      vec4 sY = texture2D(scratchMap, vObjPos.xz * 1.3 + vec2(0.6, 0.2));
+      vec4 sZ = texture2D(scratchMap, vObjPos.xy * 1.3 + vec2(0.05, 0.5));
+      vec2 sm = sX.ba * tw.x + sY.ba * tw.y + sZ.ba * tw.z;
+      float scr = sm.x * scratches;
+      float gouge = sm.y * scratches;
+      vec2 gX = sX.xy * 2.0 - 1.0, gY = sY.xy * 2.0 - 1.0, gZ = sZ.xy * 2.0 - 1.0;
+      vec3 scrPert = (tw.x * vec3(0.0, gX.y, gX.x) + tw.y * vec3(gY.x, 0.0, gY.y) + tw.z * vec3(gZ.x, gZ.y, 0.0)) * scratches;
       // wear: the sharp edges, worn smoother and brighter, patchily
       float edgeD = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
       float wear = (1.0 - smoothstep(0.0, wearWidth, edgeD)) * smoothstep(0.25, 0.8, det.a + 0.25) * wearAmount;
       // two finishes: the satin hex shank, the polished neck and tip
       float onHex = 1.0 - smoothstep(hexZone.x - hexZone.y, hexZone.x + hexZone.y, vObjPos.y);
       diffuseColor.rgb = mix(diffuseColor.rgb, hexColor, onHex);
-      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity) * (1.0 + 0.55 * scr) * (1.0 - 0.5 * gouge) * (1.0 - 0.7 * pocketAO);`,
+      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity) * (1.0 + 0.15 * scr) * (1.0 - 0.3 * gouge) * (1.0 - 0.7 * pocketAO);`,
     )
     .replace(
       '#include <lights_fragment_end>',
@@ -472,7 +509,7 @@ steel.onBeforeCompile = (shader) => {
     .replace(
       '#include <normal_fragment_maps>',
       `#include <normal_fragment_maps>
-      normal = normalize(normal + objToView * pert * detailNormal * (1.0 - 0.6 * wear));
+      normal = normalize(normal + objToView * (pert * detailNormal * (1.0 - 0.6 * wear) + scrPert * 0.7));
       // a faint lengthwise grind: bend the normal toward the axis-stretched highlight direction
       {
         vec3 V = normalize(vViewPosition);
