@@ -352,6 +352,7 @@ const steel = new THREE.MeshStandardMaterial({
 })
 const steelUniforms = {
   detailMap: { value: detail as THREE.Texture },
+  rib: { value: new THREE.Vector4(1, 0, 0, 0) }, // the drive face: half-side (object units), taper per unit below it, its y, on
   scratchMap: { value: scratchTexture() },
   scratches: { value: LOOK.detail.scratches },
   detailScale: { value: LOOK.detail.scale },
@@ -387,7 +388,7 @@ steel.onBeforeCompile = (shader) => {
     .replace(
       '#include <common>',
       `#include <common>
-      uniform sampler2D detailMap, scratchMap; uniform float scratches, detailScale, detailNormal, roughVar, albedoVar, wearWidth, wearAmount, aniso;
+      uniform sampler2D detailMap, scratchMap; uniform vec4 rib; uniform float scratches, detailScale, detailNormal, roughVar, albedoVar, wearWidth, wearAmount, aniso;
       uniform vec3 axisView; uniform vec3 hexColor; uniform float hexRough; uniform vec2 hexZone;
       uniform mat3 envRot; uniform mat3 objToView;
       varying vec3 vEdgeDist; varying vec3 vObjPos; varying vec3 vObjNormal;`,
@@ -411,6 +412,19 @@ steel.onBeforeCompile = (shader) => {
       float rAx = length(vObjPos.xz);
       float shank = smoothstep(0.02, 0.035, vObjPos.y) * (1.0 - smoothstep(0.48, 0.495, vObjPos.y));
       float cavity = (1.0 - smoothstep(0.1232, 0.1262, rAx)) * shank; // the engraving, below the flats
+      float pocketAO = 0.0;
+      // the logo's pockets: every surface below the face and inside the tip's outline is a pocket wall or
+      // floor (the solid inside is never seen); the room hardly reaches in there, so they read near black
+      {
+        float below = rib.z - vObjPos.y;
+        float side = rib.x * (1.0 + below * rib.y); // the tip's half-side at this height
+        float inner = 1.0 - smoothstep(side - 0.004, side - 0.0025, max(abs(vObjPos.x), abs(vObjPos.z)));
+        float deep = below < 0.172 ? 1.0 : step(dot(vObjNormal.xz, vObjPos.xz), 0.0) * step(below, 0.26); // under the logo section: the pockets' cone floors face the axis, the bullet's shoulder faces out
+        // and inside the bullet: where it rounds off the square's corners the turned surface is inside the square too
+        float round = 1.0 - smoothstep(-0.005, -0.003, rAx - (0.1106 + min(below, 0.172) * 0.0437));
+        float pocket = rib.w * inner * round * deep * smoothstep(0.0015, 0.005, below);
+        pocketAO = pocket * (0.85 + 0.15 * smoothstep(0.004, 0.03, below));
+      }
       // use marks: fine scratches, triplanar like the grain (the flats get them along the axis)
       float scr = texture2D(scratchMap, vObjPos.zy * 1.6 + vec2(0.31, 0.0)).r * tw.x + texture2D(scratchMap, vObjPos.xz * 1.6 + vec2(0.6, 0.2)).r * tw.y + texture2D(scratchMap, vObjPos.xy * 1.6 + vec2(0.05, 0.5)).r * tw.z;
       scr *= scratches;
@@ -420,12 +434,19 @@ steel.onBeforeCompile = (shader) => {
       // two finishes: the satin hex shank, the polished neck and tip
       float onHex = 1.0 - smoothstep(hexZone.x - hexZone.y, hexZone.x + hexZone.y, vObjPos.y);
       diffuseColor.rgb = mix(diffuseColor.rgb, hexColor, onHex);
-      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity) * (1.0 + 0.55 * scr);`,
+      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity) * (1.0 + 0.55 * scr) * (1.0 - 0.7 * pocketAO);`,
+    )
+    .replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      // in the pockets the room is shut out: darkening the albedo alone leaves the Fresnel/F90 sheen
+      reflectedLight.indirectSpecular *= 1.0 - 0.97 * pocketAO;
+      reflectedLight.directSpecular *= 1.0 - 0.95 * pocketAO;`,
     )
     .replace(
       '#include <roughnessmap_fragment>',
       `#include <roughnessmap_fragment>
-      roughnessFactor = clamp(mix(roughnessFactor, hexRough, onHex) + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear + 0.45 * cavity + 0.22 * scr, 0.08, 1.0);`,
+      roughnessFactor = clamp(mix(roughnessFactor, hexRough, onHex) + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear + 0.45 * cavity + 0.22 * scr + 0.3 * pocketAO, 0.08, 1.0);`,
     )
     .replace(
       '#include <normal_fragment_maps>',
@@ -439,6 +460,18 @@ steel.onBeforeCompile = (shader) => {
         normal = normalize(mix(normal, aN, aniso * (1.0 - roughnessFactor) * (1.0 - abs(dot(normalize(vObjNormal), vec3(0.0, 1.0, 0.0))))));
       }`,
     )
+}
+
+// the drive face, measured from the mesh: its height and half-side (the up-facing triangles at the very top)
+function measureFace(geo: THREE.BufferGeometry) {
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute
+  let top = 0
+  for (let i = 0; i < pos.count; i++) top = Math.max(top, pos.getY(i))
+  let half = 0
+  for (let i = 0; i < pos.count; i++) if (pos.getY(i) > top - 1e-4) half = Math.max(half, Math.abs(pos.getX(i)), Math.abs(pos.getZ(i)))
+  half += 0.06 / 25 // the face's 45° edge break: the flanks sit that much further out
+  // the tip's taper: 4.5 mm at the base of the logo section to 3.78 at the face, over 4.3 of the bit's 25 mm
+  steelUniforms.rib.value.set(half, (4.5 / 3.78 - 1) / (4.3 / 25), top, 1)
 }
 
 // flat STL facets → creased normals: a vertex takes the average of the faces around it that lie within
@@ -570,6 +603,7 @@ new STLLoader().load('/assets/models/bit.stl', (geo) => {
   geo.scale(s, s, s)
   creased(geo, 12) // the turned surfaces are fine enough (256 segments) to smooth at 12°; flats and ramps stay crisp
   edgeDistances(geo, 18)
+  measureFace(geo)
   const mesh = new THREE.Mesh(geo, steel)
   mesh.castShadow = true
   steelUniforms.objToView.value = mesh.normalMatrix // kept current by the renderer each frame
