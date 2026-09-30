@@ -33,14 +33,15 @@ const ENV_URL = '/assets/bit/studio-env.jpg' // equirect-ish (21:9) bright studi
 const LOOK = {
   bitFraction: 0.38, // bit height as a fraction of the viewport height
   fov: 60, // action-cam vertical FOV (landscape); portrait uses a little less
-  // the sweep behind everything: linear colour that tone-maps (ACES) to ≈ #f7f4ec, a hint of warmth
-  backdrop: new THREE.Color(2.917, 2.293, 1.31),
-  lamp: new THREE.Color(10, 8.2, 6), // the bright backlight's core, linear
-  bloom: { threshold: 3.4, strength: 0.22, radius: 0.65 },
-  steel: { color: 0x626a78, roughness: 0.52, envMapIntensity: 1.0 },
-  detail: { scale: 1.0, normal: 0.6, roughVar: 0.5, albedoVar: 0.34, wearWidth: 0.012, wearAmount: 0.7, aniso: 0.25 },
+  // the sweep behind everything: linear colour that tone-maps (ACES) to ≈ #faf9f5, the barest warmth
+  backdrop: new THREE.Color(3.947, 3.504, 2.282),
+  lamp: new THREE.Color(7.2, 6.8, 6.0), // the backlight's core, linear: bright, not blinding
+  bloom: { threshold: 4.3, strength: 0.16, radius: 0.6 },
+  steel: { color: 0x626a78, roughness: 0.4, envMapIntensity: 1.0 },
+  detail: { scale: 1.0, normal: 0.08, roughVar: 0.06, albedoVar: 0.05, wearWidth: 0.008, wearAmount: 0.15, aniso: 0.25 },
   lens: { barrel: 0.05, ca: 0.0016, vignette: 0.07, sharpen: 0.6, sharpenClamp: 0.035 },
-  noise: { shadows: 0.04, highlights: 0.011, chroma: 0.01, fixed: 0.15, hz: 30 },
+  // grain only where the light is: it rides on the glow (the bloom) and on the brightest highlights
+  noise: { glow: 0.05, base: 0.0, chroma: 0.008, fixed: 0.15, hz: 30 },
   maxDpr: 1.5,
 }
 
@@ -149,8 +150,8 @@ const rect = (w: number, h: number, colour: THREE.Color, intensity: number, x: n
   l.lookAt(0, 0.5, 0)
   return l
 }
-rect(2.4, 1.8, new THREE.Color(1, 0.94, 0.86), 2.4, 0.7, 0.95, -1.3) // the lamp: rim from behind, high right
-rect(1.4, 2.2, new THREE.Color(1, 0.95, 0.9), 1.5, -1.1, 0.55, -1.1) // second rim, low left
+rect(1.3, 1.8, new THREE.Color(1, 0.94, 0.86), 2.4, 0.7, 0.95, -1.3) // the lamp: rim from behind, high right
+rect(0.8, 2.2, new THREE.Color(1, 0.95, 0.9), 1.5, -1.1, 0.55, -1.1) // second rim, low left
 rect(1.6, 1.6, new THREE.Color(0.85, 0.92, 1.0), 0.45, -1.6, 1.4, 1.8) // cool front fill
 rect(0.5, 2.0, white(1), 1.0, 1.7, 0.7, 0.2) // side strip, to reveal bevels
 
@@ -179,11 +180,11 @@ rig.add(lamp)
 
 // the shadow: a spot aligned with the lamp, so the cast shadow falls toward the camera
 const spot = new THREE.SpotLight(0xfff0dc, 3, 0, 0.5, 0.6, 2)
-spot.position.set(0.35, 1.7, -1.9)
+spot.position.set(0.3, 2.6, -1.7) // high behind: a short soft shadow, not a long streak
 spot.castShadow = true
 spot.shadow.mapSize.set(narrow ? 512 : 1024, narrow ? 512 : 1024)
-spot.shadow.radius = 4
-spot.shadow.blurSamples = 8
+spot.shadow.radius = 14
+spot.shadow.blurSamples = 16
 spot.shadow.bias = -0.0004
 spot.shadow.camera.near = 0.5
 spot.shadow.camera.far = 8
@@ -378,12 +379,12 @@ steel.onBeforeCompile = (shader) => {
       // wear: the sharp edges, worn smoother and brighter, patchily
       float edgeD = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
       float wear = (1.0 - smoothstep(0.0, wearWidth, edgeD)) * smoothstep(0.25, 0.8, det.a + 0.25) * wearAmount;
-      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.18 * wear);`,
+      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear);`,
     )
     .replace(
       '#include <roughnessmap_fragment>',
       `#include <roughnessmap_fragment>
-      roughnessFactor = clamp(roughnessFactor + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.12 - 0.06 * wear, 0.08, 1.0);`,
+      roughnessFactor = clamp(roughnessFactor + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear, 0.08, 1.0);`,
     )
     .replace(
       '#include <normal_fragment_maps>',
@@ -497,18 +498,18 @@ function contactTexture() {
   c.width = c.height = 128
   const g = c.getContext('2d')!
   const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64)
-  grad.addColorStop(0, 'rgba(0,0,0,0.55)')
+  grad.addColorStop(0, 'rgba(0,0,0,0.7)')
   grad.addColorStop(0.45, 'rgba(0,0,0,0.25)')
   grad.addColorStop(1, 'rgba(0,0,0,0)')
   g.fillStyle = grad
   g.fillRect(0, 0, 128, 128)
   return new THREE.CanvasTexture(c)
 }
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ color: 0x1a1612, opacity: 0.5, depthWrite: false }))
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ color: 0x1a1816, opacity: 0.3, depthWrite: false }))
 floor.rotation.x = -Math.PI / 2
 floor.receiveShadow = true
 scene.add(floor)
-const contact = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.36), new THREE.MeshBasicMaterial({ map: contactTexture(), transparent: true, depthWrite: false }))
+const contact = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ map: contactTexture(), transparent: true, depthWrite: false }))
 contact.rotation.x = -Math.PI / 2
 contact.position.y = 0.0005
 scene.add(contact)
@@ -569,7 +570,7 @@ const LensShader = {
     vignette: { value: LOOK.lens.vignette },
     sharpen: { value: LOOK.lens.sharpen },
     sharpenClamp: { value: LOOK.lens.sharpenClamp },
-    noise: { value: new THREE.Vector4(LOOK.noise.shadows, LOOK.noise.highlights, LOOK.noise.chroma, LOOK.noise.fixed) },
+    noise: { value: new THREE.Vector4(LOOK.noise.glow, LOOK.noise.base, LOOK.noise.chroma, LOOK.noise.fixed) },
     noiseHz: { value: LOOK.noise.hz },
   },
   vertexShader: /* glsl */ `
@@ -580,7 +581,7 @@ const LensShader = {
     uniform sampler2D tDiffuse, tBloom;
     uniform vec2 resolution, shake;
     uniform float time, barrel, ca, vignette, sharpen, sharpenClamp, noiseHz;
-    uniform vec4 noise; // shadows, highlights, chroma, fixed-pattern share
+    uniform vec4 noise; // glow, base, chroma, fixed-pattern share
     varying vec2 vUv;
 
     // ACES filmic as three.js has it (Stephen Hill's fit), exposure folded in
@@ -633,7 +634,8 @@ const LensShader = {
 
       col = srgb(col);
 
-      // sensor noise: luma, heavier in the shadows; a little chroma; mostly temporal at noiseHz, a fixed
+      // sensor noise, only where the light is: its amount follows the glow the lamp throws (the bloom)
+      // and fades to nothing on the plain backdrop and the steel; mostly temporal at noiseHz, a fixed
       // pattern underneath
       float tick = floor(time * noiseHz);
       vec2 fp = gl_FragCoord.xy;
@@ -641,10 +643,11 @@ const LensShader = {
       float nT = hash(seed) + hash(seed + 41.0) - 1.0; // triangular, RMS 0.408
       float nF = hash(fp) + hash(fp + 17.0) - 1.0;
       float n = ((1.0 - noise.w) * nT + noise.w * nF) / 0.408;
-      float sigma = mix(noise.x, noise.y, smoothstep(0.05, 0.9, luma(col)));
+      float glowAmt = smoothstep(0.02, 0.6, luma(texture2D(tBloom, duv).rgb));
+      float sigma = noise.y + noise.x * glowAmt;
       vec2 cell = floor(fp / 3.0) + tick * 5.3; // chroma in 3 px blotches, as denoised video has it
       vec3 chroma = (vec3(hash(cell + 3.0), hash(cell + 5.0), hash(cell + 9.0)) - 0.5) / 0.29;
-      col += n * sigma + chroma * noise.z;
+      col += n * sigma + chroma * noise.z * glowAmt;
 
       gl_FragColor = vec4(col, 1.0);
     }
