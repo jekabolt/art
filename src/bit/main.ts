@@ -33,15 +33,15 @@ const ENV_URL = '/assets/bit/studio-env.jpg' // equirect-ish (21:9) bright studi
 const LOOK = {
   bitFraction: 0.38, // bit height as a fraction of the viewport height
   fov: 60, // action-cam vertical FOV (landscape); portrait uses a little less
-  // the sweep behind everything: linear colour that tone-maps (ACES) to ≈ #faf9f5, the barest warmth
-  backdrop: new THREE.Color(3.947, 3.504, 2.282),
-  lamp: new THREE.Color(7.2, 6.8, 6.0), // the backlight's core, linear: bright, not blinding
-  bloom: { threshold: 4.3, strength: 0.16, radius: 0.6 },
-  steel: { color: 0x626a78, roughness: 0.4, envMapIntensity: 1.0 },
-  detail: { scale: 1.0, normal: 0.08, roughVar: 0.06, albedoVar: 0.05, wearWidth: 0.008, wearAmount: 0.15, aniso: 0.25 },
+  // the sweep behind everything: linear colour that tone-maps (ACES) to ≈ #fcfbf9, white with a breath of warmth
+  backdrop: new THREE.Color(5.4, 4.565, 3.347),
+  lamp: new THREE.Color(8.4, 8.0, 7.4), // the backlight's core, linear: just over the backdrop, a small soft glow
+  bloom: { threshold: 6.2, strength: 0.12, radius: 0.55 },
+  steel: { color: 0x6c7380, roughness: 0.2, envMapIntensity: 1.0 }, // ground steel with a little gloss
+  detail: { scale: 1.0, normal: 0.012, roughVar: 0.05, albedoVar: 0.03, wearWidth: 0.008, wearAmount: 0.1, aniso: 0.35 },
   lens: { barrel: 0.05, ca: 0.0016, vignette: 0.07, sharpen: 0.6, sharpenClamp: 0.035 },
   // a fine, even sensor grain over the whole frame: no clouds, no colour blotches
-  noise: { glow: 0.0, base: 0.012, chroma: 0.0, fixed: 0.15, hz: 30 },
+  noise: { glow: 0.0, base: 0.006, chroma: 0.0, fixed: 0.15, hz: 30 },
   maxDpr: 1.5,
 }
 
@@ -150,14 +150,14 @@ const rect = (w: number, h: number, colour: THREE.Color, intensity: number, x: n
   l.lookAt(0, 0.5, 0)
   return l
 }
-rect(1.3, 1.8, new THREE.Color(1, 0.94, 0.86), 2.4, 0.7, 0.95, -1.3) // the lamp: rim from behind, high right
-rect(0.8, 2.2, new THREE.Color(1, 0.95, 0.9), 1.5, -1.1, 0.55, -1.1) // second rim, low left
+rect(0.8, 1.8, new THREE.Color(1, 0.96, 0.9), 2.4, 0.7, 0.95, -1.3) // the lamp: rim from behind, high right
+rect(0.5, 2.2, new THREE.Color(1, 0.97, 0.94), 1.5, -1.1, 0.55, -1.1) // second rim, low left
 rect(1.6, 1.6, new THREE.Color(0.85, 0.92, 1.0), 0.45, -1.6, 1.4, 1.8) // cool front fill
 rect(0.5, 2.0, white(1), 1.0, 1.7, 0.7, 0.2) // side strip, to reveal bevels
 
 // the lamp itself: a bright soft disc behind the bit, so bloom wraps the silhouette
 const lamp = new THREE.Mesh(
-  new THREE.PlaneGeometry(2.6, 2.6),
+  new THREE.PlaneGeometry(1.6, 1.6),
   new THREE.ShaderMaterial({
     uniforms: { color: { value: LOOK.lamp } },
     vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -376,15 +376,19 @@ steel.onBeforeCompile = (shader) => {
       float mottle = texture2D(detailMap, vObjPos.zy * detailScale * 0.21 + 0.5).a * tw.x + texture2D(detailMap, vObjPos.xz * detailScale * 0.21).a * tw.y + texture2D(detailMap, vObjPos.xy * detailScale * 0.21 + 0.25).a * tw.z;
       vec2 nX = dX.xy * 2.0 - 1.0, nY = dY.xy * 2.0 - 1.0, nZ = dZ.xy * 2.0 - 1.0;
       vec3 pert = tw.x * vec3(0.0, nX.y, nX.x) + tw.y * vec3(nY.x, 0.0, nY.y) + tw.z * vec3(nZ.x, nZ.y, 0.0);
+      // recesses on the hex shank (the ring groove, the engraving): below the flats' radius they are
+      // hidden from most of the room, so they read dark, not as a slit of light
+      float rAx = length(vObjPos.xz);
+      float cavity = (1.0 - smoothstep(0.1215, 0.1255, rAx)) * smoothstep(0.02, 0.035, vObjPos.y) * (1.0 - smoothstep(0.54, 0.555, vObjPos.y));
       // wear: the sharp edges, worn smoother and brighter, patchily
       float edgeD = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
       float wear = (1.0 - smoothstep(0.0, wearWidth, edgeD)) * smoothstep(0.25, 0.8, det.a + 0.25) * wearAmount;
-      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear);`,
+      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity);`,
     )
     .replace(
       '#include <roughnessmap_fragment>',
       `#include <roughnessmap_fragment>
-      roughnessFactor = clamp(roughnessFactor + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear, 0.08, 1.0);`,
+      roughnessFactor = clamp(roughnessFactor + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear + 0.45 * cavity, 0.08, 1.0);`,
     )
     .replace(
       '#include <normal_fragment_maps>',
