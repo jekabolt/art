@@ -40,8 +40,8 @@ const LOOK = {
   steel: { color: 0x626a78, roughness: 0.4, envMapIntensity: 1.0 },
   detail: { scale: 1.0, normal: 0.08, roughVar: 0.06, albedoVar: 0.05, wearWidth: 0.008, wearAmount: 0.15, aniso: 0.25 },
   lens: { barrel: 0.05, ca: 0.0016, vignette: 0.07, sharpen: 0.6, sharpenClamp: 0.035 },
-  // grain only where the light is: it rides on the glow (the bloom) and on the brightest highlights
-  noise: { glow: 0.05, base: 0.0, chroma: 0.008, fixed: 0.15, hz: 30 },
+  // a fine, even sensor grain over the whole frame: no clouds, no colour blotches
+  noise: { glow: 0.0, base: 0.012, chroma: 0.0, fixed: 0.15, hz: 30 },
   maxDpr: 1.5,
 }
 
@@ -634,9 +634,7 @@ const LensShader = {
 
       col = srgb(col);
 
-      // sensor noise, only where the light is: its amount follows the glow the lamp throws (the bloom)
-      // and fades to nothing on the plain backdrop and the steel; mostly temporal at noiseHz, a fixed
-      // pattern underneath
+      // sensor noise: a fine even grain, mostly temporal at noiseHz, a fixed pattern underneath
       float tick = floor(time * noiseHz);
       vec2 fp = gl_FragCoord.xy;
       vec2 seed = fp + vec2(tick * 13.37, tick * 7.91);
