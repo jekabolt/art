@@ -1,19 +1,20 @@
-// FLOW: thousands of hairline particles carried left to right by a stream, and the logo standing in
-// it as a solid body. The mark is never drawn — it is the one place nothing flows through: the
-// stream parts at its front, runs faster over its top and bottom, closes behind it, and inside the
-// letters' counters, cut off from the stream, the water turns in slow eddies. A finger (or the
-// cursor) is a second body: the streamlines part around it wherever it goes. A tap changes the ink:
-// black, red, blue, purple.
+// FLOW: the logo in a wind tunnel. A steady wind blows left to right, and the mark stands in it as a
+// solid body, drawn the way flow simulations are drawn: the air coloured by its pressure — red where
+// it piles up against the body, blue where it races past the edges, cyan in the free stream — with
+// long fine black streamlines carried through it, and the body itself a plain white model. Inside the letters' counters, cut off from the wind, the air turns in slow eddies. Swipe
+// to turn the body in the wind (it keeps turning a little after you let go); a tap changes what is
+// shown: pressure, speed, or the streamlines alone.
 //
 // The flow is divergence-free by construction: the velocity is the curl of a stream function ψ,
-// the uniform stream (ψ = y) plus a little drifting noise, pressed to a constant on each body's
-// boundary with a smooth ramp in the distance to it (Bridson's curl-noise boundaries). ψ is constant
-// along the walls, so no particle can ever cross into the mark.
+// the uniform wind (ψ = y) plus a faint drifting turbulence, pressed to a constant on the body's
+// walls with a smooth ramp in the distance to them (Bridson's curl-noise boundaries), plus a thin
+// circulation hugging every wall. ψ is constant along the walls, so no air crosses into the body.
+// The pressure is Bernoulli's, Cp = 1 − (|v|/U)².
 import { logoBars } from '../core/logo-bars'
 import { LOGO_STROKE } from '../core/logo-path'
 import './flow.css'
 
-// --- the mark's distance field, sampled once per size on a grid ------------------------------------------
+// --- the body: bars in logo units (centred, y down) and its distance field on a grid ----------------------
 const bars = logoBars().map((s) => {
   const len = Math.hypot(s.bx - s.ax, s.by - s.ay)
   return { cx: (s.ax + s.bx) / 2 - 300, cy: (s.ay + s.by) / 2 - 300, ux: (s.bx - s.ax) / len, uy: (s.by - s.ay) / len, hl: len / 2 }
@@ -31,17 +32,43 @@ function logoSD(x: number, y: number): number {
   return d
 }
 
+// the distance field in the body's own frame, once: logo units, 2.5 per cell, far enough out that the
+// ramp around the body is covered at any turn; beyond the grid the distance grows with the radius
+const LCELL = 2.5
+const LREACH = 620
+const LN = Math.ceil((2 * LREACH) / LCELL) + 1
+const logoField = new Float32Array(LN * LN)
+for (let j = 0; j < LN; j++)
+  for (let i = 0; i < LN; i++) logoField[j * LN + i] = logoSD(i * LCELL - LREACH, j * LCELL - LREACH)
+
+function bodyDist(u: number, v: number) {
+  // u, v: logo units from the body's centre, in its own frame
+  const fx = (u + LREACH) / LCELL
+  const fy = (v + LREACH) / LCELL
+  if (fx < 0 || fy < 0 || fx >= LN - 1 || fy >= LN - 1) {
+    // far out the mark is just its square: the box's distance, which the grid's edge agrees with
+    const qx = Math.abs(u) - 258
+    const qy = Math.abs(v) - 258
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0)
+  }
+  const i = Math.floor(fx)
+  const j = Math.floor(fy)
+  const a = fx - i
+  const b = fy - j
+  const o = j * LN + i
+  const p = logoField[o]
+  const q = logoField[o + 1]
+  const r = logoField[o + LN]
+  const s = logoField[o + LN + 1]
+  return p + (q - p) * a + (r - p) * b + (p - q - r + s) * a * b
+}
+
 // smooth ramp: 0 at the wall, 1 from x = 1 on, with zero slope there (Bridson)
 function ramp(x: number) {
   if (x >= 1) return 1
   if (x <= -1) return -1
   return (15 / 8) * x - (10 / 8) * x ** 3 + (3 / 8) * x ** 5
 }
-
-const CELL = 3 // css px per grid cell
-let gw = 0
-let gh = 0
-let field = new Float32Array(0) // distance to the mark, css px (negative inside the strokes)
 
 // --- noise ----------------------------------------------------------------------------------------------
 function hash(x: number, y: number, z: number) {
@@ -76,64 +103,24 @@ const ctx = canvas.getContext('2d')!
 let w = 1
 let h = 1
 let dpr = 1
+let cx = 0
+let cy = 0
 let scale = 1 // css px per logo unit
-let L = 100 // the ramp's reach around the mark, css px
-let noiseScale = 120
+let L = 100 // the ramp's reach around the body, css px
 let LS = 12 // the wall circulation's reach, css px
-let CIRC = 6 // its strength: ψ units, so that it runs about as fast as the stream along the walls
-
-function resize() {
-  w = window.innerWidth
-  h = window.innerHeight
-  dpr = Math.min(window.devicePixelRatio || 1, 2)
-  canvas.width = Math.round(w * dpr)
-  canvas.height = Math.round(h * dpr)
-  const side = Math.min(w <= 768 ? 0.74 * w : 0.42 * w, 0.66 * h)
-  scale = side / 516
-  L = side * 0.28
-  noiseScale = side * 0.3
-  LS = 13 * scale
-  CIRC = (LS / 1.875) * 0.9
-  nw = Math.ceil(w / NCELL) + 2
-  nh = Math.ceil(h / NCELL) + 2
-  refreshNoise()
-  gw = Math.ceil(w / CELL) + 2
-  gh = Math.ceil(h / CELL) + 2
-  field = new Float32Array(gw * gh)
-  for (let j = 0; j < gh; j++) {
-    for (let i = 0; i < gw; i++) {
-      const x = (i * CELL - w / 2) / scale
-      const y = (j * CELL - h / 2) / scale
-      field[j * gw + i] = logoSD(x, y) * scale
-    }
-  }
-  seedAll()
-}
-
-function markDist(x: number, y: number) {
-  const fx = Math.min(gw - 1.001, Math.max(0, x / CELL))
-  const fy = Math.min(gh - 1.001, Math.max(0, y / CELL))
-  const i = Math.floor(fx)
-  const j = Math.floor(fy)
-  const u = fx - i
-  const v = fy - j
-  const o = j * gw + i
-  const a = field[o]
-  const b = field[o + 1]
-  const c = field[o + gw]
-  const d = field[o + gw + 1]
-  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
-}
+let CIRC = 6 // its strength
+let noiseScale = 120
 
 // the turbulence changes slowly, so it is sampled on a coarse grid once a frame
 const NCELL = 24
 let nw = 0
 let nh = 0
 let noiseGrid = new Float32Array(0)
+let time = 0
 function refreshNoise() {
   if (noiseGrid.length !== nw * nh) noiseGrid = new Float32Array(nw * nh)
   for (let j = 0; j < nh; j++)
-    for (let i = 0; i < nw; i++) noiseGrid[j * nw + i] = vnoise((i * NCELL) / noiseScale, (j * NCELL) / noiseScale, time * 0.12)
+    for (let i = 0; i < nw; i++) noiseGrid[j * nw + i] = vnoise((i * NCELL) / noiseScale - time * 0.25, (j * NCELL) / noiseScale, time * 0.08)
 }
 function noiseAt(x: number, y: number) {
   const fx = Math.min(nw - 1.001, Math.max(0, x / NCELL))
@@ -150,60 +137,135 @@ function noiseAt(x: number, y: number) {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
 }
 
-// --- the stream -------------------------------------------------------------------------------------------
-const finger = { x: -1e4, y: -1e4, r: 0, target: 0 }
-let time = 0
+// the colour field: coarse cells, drawn smoothly scaled up
+const FCELL = 5
+let fw = 0
+let fh = 0
+const fieldCanvas = document.createElement('canvas')
+const fctx = fieldCanvas.getContext('2d')!
+let fieldImg = fctx.createImageData(1, 1)
 
-function psiFree(x: number, y: number) {
-  // the uniform stream with a little drifting turbulence, measured from the mark's middle
-  const yy = y - h / 2
-  return yy + noiseScale * 0.35 * noiseAt(x, y)
+function resize() {
+  w = window.innerWidth
+  h = window.innerHeight
+  dpr = Math.min(window.devicePixelRatio || 1, 2)
+  canvas.width = Math.round(w * dpr)
+  canvas.height = Math.round(h * dpr)
+  cx = w / 2
+  cy = h / 2
+  const side = Math.min(w <= 768 ? 0.62 * w : 0.34 * w, 0.52 * h)
+  scale = side / 516
+  L = side * 0.55
+  LS = 13 * scale
+  CIRC = (LS / 1.875) * 0.9
+  noiseScale = side * 0.45
+  nw = Math.ceil(w / NCELL) + 2
+  nh = Math.ceil(h / NCELL) + 2
+  refreshNoise()
+  fw = Math.ceil(w / FCELL) + 1
+  fh = Math.ceil(h / FCELL) + 1
+  fieldCanvas.width = fw
+  fieldCanvas.height = fh
+  fieldImg = fctx.createImageData(fw, fh)
+  seedAll()
 }
+
+// --- the body's turn --------------------------------------------------------------------------------------------
+const turn = { a: 0.18, v: 0 } // radians, radians per second
+let cosA = 1
+let sinA = 0
+
+function markDist(x: number, y: number) {
+  const dx = x - cx
+  const dy = y - cy
+  // into the body's frame: turn back by its angle
+  const u = (cosA * dx + sinA * dy) / scale
+  const v = (-sinA * dx + cosA * dy) / scale
+  return bodyDist(u, v) * scale
+}
+
+// --- the wind -------------------------------------------------------------------------------------------------
+const SPEED = 60 // css px per second in the free stream
 function psi(x: number, y: number) {
-  // the mark: ψ pressed to 0 on its walls (its middle stands at ψ = 0 in the free stream), plus a
-  // thin circulation hugging every wall — it is what keeps the water moving in the channels between
-  // the letters, where the stream cannot reach: it runs along each wall, up one side, down the other
-  const dm = markDist(x, y)
-  let p = psiFree(x, y) * ramp(dm / L) + CIRC * ramp(dm / LS)
-  if (finger.r > 1) {
-    // the finger: ψ pressed to its value at the finger's centre
-    const dc = markDist(finger.x, finger.y)
-    const pc = psiFree(finger.x, finger.y) * ramp(dc / L) + CIRC * ramp(dc / LS)
-    const df = Math.hypot(x - finger.x, y - finger.y) - finger.r
-    p = pc + (p - pc) * ramp(Math.max(0, df) / (finger.r * 1.6))
-  }
-  return p
+  const d = markDist(x, y)
+  const free = y - cy + noiseScale * 0.05 * noiseAt(x, y)
+  return free * ramp(d / L) + CIRC * ramp(d / LS)
+}
+function velocity(x: number, y: number, out: number[]) {
+  const e = 1.5
+  out[0] = ((psi(x, y + e) - psi(x, y - e)) / (2 * e)) * SPEED
+  out[1] = (-(psi(x + e, y) - psi(x - e, y)) / (2 * e)) * SPEED
 }
 
-// --- particles -----------------------------------------------------------------------------------------------
-const TRAIL = 30 // points kept per particle
-const EVERY = 2 // frames between trail points
-const SPEED = 42 // css px per second in the free stream
+// --- colour ------------------------------------------------------------------------------------------------------
+// the rainbow of flow plots (jet), a touch softened
+function jet(x: number, out: number[]) {
+  const c = (v: number) => Math.max(0, Math.min(1, v))
+  out[0] = c(1.5 - Math.abs(4 * x - 3))
+  out[1] = c(1.5 - Math.abs(4 * x - 2))
+  out[2] = c(1.5 - Math.abs(4 * x - 1))
+}
+const MODES = ['pressure', 'speed', 'lines'] as const
+let mode = 0
+
+function colourOf(speed: number, out: number[]) {
+  const s = speed / SPEED
+  if (MODES[mode] === 'pressure') {
+    const cp = 1 - s * s
+    // free stream (Cp 0) sits at cyan-blue; stagnation (Cp 1) is red; fast air sinks to deep blue
+    jet(cp >= 0 ? 0.32 + 0.68 * cp : 0.32 / (1 - cp * 0.5), out)
+  } else jet(Math.min(1, 0.36 * s), out) // still air deep blue, the free stream cyan, fast air red
+}
+
+const vv = [0, 0]
+const col = [0, 0, 0]
+function computeField() {
+  const fb = fieldImg.data
+  for (let j = 0; j < fh; j++) {
+    for (let i = 0; i < fw; i++) {
+      const x = i * FCELL
+      const y = j * FCELL
+      const o = (j * fw + i) * 4
+      velocity(x, y, vv)
+      colourOf(Math.hypot(vv[0], vv[1]), col)
+      fb[o] = col[0] * 255
+      fb[o + 1] = col[1] * 255
+      fb[o + 2] = col[2] * 255
+      fb[o + 3] = 255
+    }
+  }
+  fctx.putImageData(fieldImg, 0, 0)
+}
+
+// --- streamlines -----------------------------------------------------------------------------------------------
+const TRAIL = 80
+const EVERY = 2
 let N = 0
 let px = new Float32Array(0)
 let py = new Float32Array(0)
 let age = new Float32Array(0)
 let life = new Float32Array(0)
-let count = new Uint16Array(0) // trail points so far
-let trail = new Float32Array(0) // N × TRAIL × 2, a ring shared by all (same write slot for everyone)
+let count = new Uint16Array(0)
+let trail = new Float32Array(0)
 let slot = 0
 
-function seed(k: number) {
+function seed(k: number, anywhere: boolean) {
   for (let tries = 0; tries < 20; tries++) {
-    const x = Math.random() * w
+    // new air mostly comes in from the left edge, some anywhere (for the eddies in the counters)
+    const x = anywhere || Math.random() < 0.35 ? Math.random() * w : Math.random() * 40 - 20
     const y = Math.random() * h
-    if (markDist(x, y) > 1.5 && Math.hypot(x - finger.x, y - finger.y) > finger.r + 2) {
+    if (markDist(x, y) > 1.5) {
       px[k] = x
       py[k] = y
       break
     }
   }
   age[k] = 0
-  life[k] = 3 + Math.random() * 6
+  life[k] = 6 + Math.random() * 10
   count[k] = 0
 }
 function seedAll() {
-  N = Math.min(6000, Math.round((w * h) / 190))
+  N = Math.min(2200, Math.round((w * h) / 520))
   px = new Float32Array(N)
   py = new Float32Array(N)
   age = new Float32Array(N)
@@ -211,71 +273,28 @@ function seedAll() {
   count = new Uint16Array(N)
   trail = new Float32Array(N * TRAIL * 2)
   for (let k = 0; k < N; k++) {
-    seed(k)
-    age[k] = Math.random() * life[k] // staggered, so they don't all renew together
+    seed(k, true)
+    age[k] = Math.random() * life[k]
   }
 }
 
-function velocity(x: number, y: number, out: number[]) {
-  const e = 1.5
-  const dy = (psi(x, y + e) - psi(x, y - e)) / (2 * e)
-  const dx = (psi(x + e, y) - psi(x - e, y)) / (2 * e)
-  out[0] = dy * SPEED
-  out[1] = -dx * SPEED
-}
-
-// --- ink: a tap takes the next colour from the brand's palette -----------------------------------------------------
-const PALETTE = ['#0b0b0b', '#ff0000', '#311eee', '#501089']
-let ink = 0
-const PAPER = '#f4f3ef'
-
-// --- input -----------------------------------------------------------------------------------------------------
-let down: { x: number; y: number } | null = null
-let lastMove = -1e9
-function place(e: PointerEvent) {
-  finger.x = e.clientX
-  finger.y = e.clientY
-  finger.target = w <= 768 ? 46 : 58
-  lastMove = performance.now()
-}
-canvas.addEventListener('pointerdown', (e) => {
-  down = { x: e.clientX, y: e.clientY }
-  place(e)
-})
-canvas.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'mouse' || e.buttons) place(e)
-})
-canvas.addEventListener('pointerup', (e) => {
-  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) ink = (ink + 1) % PALETTE.length
-  down = null
-  if (e.pointerType !== 'mouse') finger.target = 0
-})
-canvas.addEventListener('pointerleave', () => (finger.target = 0))
-
-// --- loop ------------------------------------------------------------------------------------------------------
-const v = [0, 0]
 const v2 = [0, 0]
-let frameNo = 0
-let last = performance.now()
-
 function step(dt: number) {
   for (let k = 0; k < N; k++) {
     age[k] += dt
     const x = px[k]
     const y = py[k]
-    // midpoint step: follows the curving streamlines without spiralling out of the eddies
-    velocity(x, y, v)
-    velocity(x + v[0] * dt * 0.5, y + v[1] * dt * 0.5, v2)
+    velocity(x, y, vv)
+    velocity(x + vv[0] * dt * 0.5, y + vv[1] * dt * 0.5, v2)
     const nx = x + v2[0] * dt
     const ny = y + v2[1] * dt
-    if (age[k] > life[k] || nx < -20 || nx > w + 20 || ny < -20 || ny > h + 20 || markDist(nx, ny) < 0 || Math.hypot(nx - finger.x, ny - finger.y) < finger.r) seed(k)
+    if (age[k] > life[k] || nx < -30 || nx > w + 20 || ny < -20 || ny > h + 20 || markDist(nx, ny) < 0) seed(k, false)
     else {
       px[k] = nx
       py[k] = ny
     }
   }
 }
-
 function record() {
   slot = (slot + 1) % TRAIL
   for (let k = 0; k < N; k++) {
@@ -286,17 +305,47 @@ function record() {
   }
 }
 
+// --- drawing -------------------------------------------------------------------------------------------------
+function bodyPath() {
+  const p = new Path2D()
+  for (const b of bars) {
+    const ax = b.ux * b.hl
+    const ay = b.uy * b.hl
+    const nx = -b.uy * HW
+    const ny = b.ux * HW
+    p.moveTo(b.cx - ax - nx, b.cy - ay - ny)
+    p.lineTo(b.cx + ax - nx, b.cy + ay - ny)
+    p.lineTo(b.cx + ax + nx, b.cy + ay + ny)
+    p.lineTo(b.cx - ax + nx, b.cy - ay + ny)
+    p.closePath()
+  }
+  return p
+}
+const BODY = bodyPath()
+
 function draw() {
+  const lines = MODES[mode] === 'lines'
   ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.fillStyle = PAPER
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  if (lines) {
+    ctx.fillStyle = '#f4f3ef'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  } else {
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(fieldCanvas, 0, 0, fw * FCELL * dpr, fh * FCELL * dpr)
+  }
+  // the body: a plain model with its exact outline — white in the coloured views, black on paper
+  ctx.setTransform(dpr * scale * cosA, dpr * scale * sinA, -dpr * scale * sinA, dpr * scale * cosA, cx * dpr, cy * dpr)
+  ctx.fillStyle = lines ? '#0b0b0b' : '#f4f3ef'
+  ctx.fill(BODY, 'nonzero')
+
+  // streamlines: fine black threads, fading in when born and out before they go
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.strokeStyle = PALETTE[ink]
-  ctx.lineWidth = 0.8
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = lines ? 0.7 : 0.6
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  // three strengths: particles fade in when they are born and out before they are renewed
-  const LEVELS = [0.18, 0.42, 0.72]
+  const LEVELS = lines ? [0.2, 0.45, 0.75] : [0.15, 0.35, 0.6]
   for (let lv = 0; lv < LEVELS.length; lv++) {
     ctx.globalAlpha = LEVELS[lv]
     ctx.beginPath()
@@ -304,8 +353,7 @@ function draw() {
       const n = count[k]
       if (n < 2) continue
       const f = Math.min(age[k] / 0.8, (life[k] - age[k]) / 0.8, 1)
-      const level = f < 0.34 ? 0 : f < 0.67 ? 1 : 2
-      if (level !== lv) continue
+      if ((f < 0.34 ? 0 : f < 0.67 ? 1 : 2) !== lv) continue
       let s = slot
       let o = (k * TRAIL + s) * 2
       ctx.moveTo(px[k], py[k])
@@ -321,15 +369,66 @@ function draw() {
   ctx.globalAlpha = 1
 }
 
+// --- input: a swipe turns the body, a tap changes the view -----------------------------------------------------
+let down: { x: number; y: number } | null = null
+let drag: { x: number; y: number; t: number } | null = null
+canvas.addEventListener('pointerdown', (e) => {
+  down = { x: e.clientX, y: e.clientY }
+  drag = { x: e.clientX, y: e.clientY, t: performance.now() }
+  turn.v = 0
+  canvas.setPointerCapture(e.pointerId)
+})
+canvas.addEventListener('pointermove', (e) => {
+  if (!drag) return
+  const now = performance.now()
+  // turning about the body's middle: the swipe's sweep around it, like turning a wheel
+  const a0 = Math.atan2(drag.y - cy, drag.x - cx)
+  const a1 = Math.atan2(e.clientY - cy, e.clientX - cx)
+  let da = a1 - a0
+  if (da > Math.PI) da -= Math.PI * 2
+  if (da < -Math.PI) da += Math.PI * 2
+  // close to the middle the angle jumps: there, a sideways swipe turns it instead
+  const r = Math.hypot(e.clientX - cx, e.clientY - cy)
+  if (r < 40) da = (e.clientX - drag.x) * 0.01
+  turn.a += da
+  const dt = Math.max(0.008, (now - drag.t) / 1000)
+  turn.v = turn.v * 0.5 + (da / dt) * 0.5
+  drag = { x: e.clientX, y: e.clientY, t: now }
+})
+function release(e: PointerEvent) {
+  if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8) {
+    mode = (mode + 1) % MODES.length
+    turn.v = 0
+  }
+  if (drag && performance.now() - drag.t > 80) turn.v = 0
+  down = null
+  drag = null
+}
+canvas.addEventListener('pointerup', release)
+canvas.addEventListener('pointercancel', release)
+
+// --- loop ------------------------------------------------------------------------------------------------------
+let last = performance.now()
+let frameNo = 0
+let fieldAt = { a: NaN, frame: -99, mode: -1 }
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000)
   last = now
   time += dt
+  if (!drag) {
+    turn.a += turn.v * dt
+    turn.v *= Math.exp(-dt / 1.0)
+  }
+  cosA = Math.cos(turn.a)
+  sinA = Math.sin(turn.a)
   refreshNoise()
-  if (now - lastMove > 2500) finger.target = 0
-  finger.r += (finger.target - finger.r) * (1 - Math.exp(-dt * 6))
   step(dt)
   if (++frameNo % EVERY === 0) record()
+  // the colour field: whenever the body turns, else a few times a second for the drifting turbulence
+  if (MODES[mode] !== 'lines' && (turn.a !== fieldAt.a || frameNo - fieldAt.frame >= 6 || mode !== fieldAt.mode)) {
+    computeField()
+    fieldAt = { a: turn.a, frame: frameNo, mode }
+  }
   draw()
   requestAnimationFrame(frame)
 }
