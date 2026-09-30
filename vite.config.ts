@@ -7,7 +7,7 @@ const dist = path.join(__dirname, '.', 'dist')
 
 // Every page is its own HTML entry, so each path gets a real 200 and only its own bundle:
 // the gallery and the editor never pull three, the logo pages never pull jsPDF.
-const pages = ['index.html', 'logo-black', 'logo-white', 'invert', 'punch-card', 'gyro', 'slit-scan', 'ink', 'flag', 'sticker', 'melt', 'jelly', 'frost', 'droste', 'fourier']
+const pages = ['index.html', 'logo-black', 'logo-white', 'invert', 'punch-card', 'gyro', 'slit-scan', 'ink', 'flag', 'sticker', 'melt', 'jelly', 'frost', 'droste', 'fourier', 'oneline']
   .map((p) => path.resolve(__dirname, p.endsWith('.html') ? p : `${p}/index.html`))
 
 // Unknown paths fall back to the black logo, as every path did before the gallery.
