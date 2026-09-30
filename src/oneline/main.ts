@@ -4,7 +4,7 @@
 // drift and a fine tremor, corners slightly rounded, the pen quick on the straights and slow into
 // the corners. A finished drawing keeps boiling (redrawn twelve times a second, as hand-drawn
 // animation does) and, when the next one starts, stays underneath as a faint ghost.
-// A tap starts a new drawing.
+// Every tap makes the pen faster (×1.6, up to ×12); left alone it slows back to its own pace.
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './oneline.css'
 
@@ -353,7 +353,9 @@ function paintGhosts() {
 
 let seed = (Date.now() ^ (Math.random() * 1e9)) >>> 0
 let drawing = newDrawing(seed)
-let started = performance.now()
+let clock = 0 // seconds of drawing, at the pen's current speed
+let speed = 1
+let lastFrame = performance.now()
 let doneAt = 0
 
 function next() {
@@ -361,13 +363,19 @@ function next() {
   paintGhosts()
   seed = (seed * 1664525 + 1013904223) >>> 0
   drawing = newDrawing(seed)
-  started = performance.now()
+  clock = 0
   doneAt = 0
 }
-canvas.addEventListener('pointerdown', next)
+canvas.addEventListener('pointerdown', () => {
+  speed = Math.min(12, speed * 1.6)
+})
 
 function frame(now: number) {
-  const t = (now - started) / 1000
+  const dt = Math.min(0.1, (now - lastFrame) / 1000)
+  lastFrame = now
+  clock += dt * speed
+  speed = 1 + (speed - 1) * Math.exp(-dt / 3) // eases back to its own pace over a few seconds
+  const t = clock
   // the pen's position: the last sample it has reached
   let lo = 0
   let hi = drawing.at.length - 1
@@ -377,8 +385,8 @@ function frame(now: number) {
     else hi = mid - 1
   }
   const upto = lo + 1
-  if (upto >= drawing.at.length && !doneAt) doneAt = now
-  if (doneAt && now - doneAt > 3500) next()
+  if (upto >= drawing.at.length && !doneAt) doneAt = clock
+  if (doneAt && clock - doneAt > 3.5) next() // the pause before the next drawing speeds up too
 
   ctx.setTransform(1, 0, 0, 1, 0, 0)
   ctx.fillStyle = '#000'
