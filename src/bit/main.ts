@@ -37,12 +37,13 @@ const LOOK = {
   backdrop: new THREE.Color(5.4, 4.565, 3.347),
   lamp: new THREE.Color(8.4, 8.0, 7.4), // the backlight's core, linear: just over the backdrop, a small soft glow
   bloom: { threshold: 6.2, strength: 0.12, radius: 0.55 },
-  steel: { color: 0x6c7380, roughness: 0.2, envMapIntensity: 1.0 }, // ground steel with a little gloss
-  detail: { scale: 1.0, normal: 0.012, roughVar: 0.05, albedoVar: 0.03, wearWidth: 0.008, wearAmount: 0.1, aniso: 0.35 },
-  lens: { barrel: 0.05, ca: 0.0016, vignette: 0.07, sharpen: 0.6, sharpenClamp: 0.035 },
+  steel: { color: 0xc8ccd1, roughness: 0.1, envMapIntensity: 1.0 }, // the tip and neck: ground and polished bright
+  hex: { color: 0x5b5f65, roughness: 0.3, from: 0.593, blend: 0.008 }, // the shank: darker satin (oxide over a light blast), up to `from` of the height
+  detail: { scale: 1.0, normal: 0.012, roughVar: 0.05, albedoVar: 0.03, wearWidth: 0.008, wearAmount: 0.1, aniso: 0.35, scratches: 0.6 },
+  lens: { barrel: 0.05, ca: 0.0006, vignette: 0.07, sharpen: 0.22, sharpenClamp: 0.018 },
   // a fine, even sensor grain over the whole frame: no clouds, no colour blotches
   noise: { glow: 0.0, base: 0.006, chroma: 0.0, fixed: 0.15, hz: 30 },
-  maxDpr: 1.5,
+  maxDpr: 2,
 }
 
 const canvas = document.getElementById('bit') as HTMLCanvasElement
@@ -90,29 +91,36 @@ function studio(envImage?: HTMLImageElement) {
     const p = sweep.getAttribute('position')
     for (let i = 0; i < p.count; i++) {
       const y = p.getY(i) / 10 // −1 floor … 1 ceiling
-      const back = Math.max(0, -p.getZ(i) / 10) // 1 straight behind
-      const v = (y > 0 ? 0.55 + 0.2 * y : 0.55 + 0.25 * y) + 0.9 * back * back
-      colours.push(v, v * 0.96, v * 0.88)
+      // walls a mid grey at the horizon, a pale ceiling, the white paper table below
+      const x = p.getX(i) / 10
+      const z = p.getZ(i) / 10
+      // round the room, darker and lighter bands (walls, furniture, a door): polished steel shows them as streaks
+      const az = Math.atan2(x, z)
+      const band = 0.55 + 0.45 * Math.sin(az * 3.0 + 0.7) * Math.sin(az * 5.0 + 2.1)
+      const paper = y < 0 ? 1.0 * Math.pow(Math.max(0, -y - 0.45) / 0.55, 1.4) : 0 // the white sheet: bright only close under the bit
+      const v = 0.05 + 0.4 * band * (1.0 - 0.6 * Math.abs(y)) + (y > 0 ? 0.35 * Math.pow(y, 1.5) : 0) + paper
+      colours.push(v * 0.97, v * 0.99, v * 1.02)
     }
     sweep.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3))
     env.add(new THREE.Mesh(sweep, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })))
   }
-  // analytic cards for true HDR range (the photo is LDR): the lamp behind, two strips, the softbox above
   const card = (w: number, h: number, colour: THREE.Color, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: colour, side: THREE.DoubleSide }))
     m.position.set(x, y, z)
     m.lookAt(0, 0.5, 0)
     env.add(m)
   }
-  card(3.2, 2.4, new THREE.Color(2.2, 2.05, 1.85), 0, 1.0, -6) // the backlight (the visible disc in the scene carries the bloom)
-  card(0.9, 4, white(1.8), -4.5, 1.2, -4.5) // left strip
-  card(0.9, 4, white(1.8), 4.5, 1.2, -4.5) // right strip
-  card(6, 4, white(0.9), 0, 8, -1) // overhead softbox
-  // the camera side is dark: the photographer, the room behind them. It is what keeps the faces toward
-  // us mid grey instead of white, and gives the satin its soft broad gradients
-  card(4, 3.2, white(0.05), 0, 1.0, 5)
-  card(2.5, 6, white(0.04), -5, 1, 4.5)
-  card(2.5, 6, white(0.04), 5, 1, 4.5)
+  // the sun and the window it comes through, high front-left (the rig's sun sits in the same direction)
+  card(3.4, 3.0, new THREE.Color(5.6, 5.8, 6.0), -5.2, 4.2, 3.4)
+  card(0.5, 0.5, white(40), -4.9, 6.9, 4.3)
+  // a second, dimmer window to the right and behind: a long strip for the flanks
+  card(1.2, 4.0, white(2.4), 6, 1.6, -3.5)
+  // dark furniture and the room round the horizon: what gives polished steel its black streaks
+  const dark = white(0.012)
+  card(4.5, 2.2, dark, 0, 0.6, -7) // a black desk / sofa behind
+  card(2.0, 3.5, dark, -6.5, 0.8, -2.5)
+  // the camera side: the photographer
+  card(3, 3.2, white(0.05), 0, 1.4, 6)
   return env
 }
 // baked on the first frame, once the renderer has its size and context settled (baked at load, the
@@ -129,15 +137,7 @@ function bakeEnvironment() {
   envBaked = true
   envDirty = false
 }
-new THREE.ImageLoader().load(
-  ENV_URL,
-  (img) => {
-    envImage = img
-    envDirty = true
-  },
-  undefined,
-  () => {}, // no photo: the procedural room stays
-)
+void ENV_URL // the photo room read too warm and too even for polished steel: the room is built below
 
 // --- the light rig: turns with the camera so the lamp is always behind the bit --------------------------------
 // local frame: the camera is at +z, the lamp at −z
@@ -150,47 +150,26 @@ const rect = (w: number, h: number, colour: THREE.Color, intensity: number, x: n
   l.lookAt(0, 0.5, 0)
   return l
 }
-rect(0.8, 1.8, new THREE.Color(1, 0.96, 0.9), 2.4, 0.7, 0.95, -1.3) // the lamp: rim from behind, high right
-rect(0.5, 2.2, new THREE.Color(1, 0.97, 0.94), 1.5, -1.1, 0.55, -1.1) // second rim, low left
-rect(1.6, 1.6, new THREE.Color(0.85, 0.92, 1.0), 0.45, -1.6, 1.4, 1.8) // cool front fill
-rect(0.5, 2.0, white(1), 1.0, 1.7, 0.7, 0.2) // side strip, to reveal bevels
+// the sun: high front-left through the window, a crisp shadow thrown back and to the right
+const sun = new THREE.DirectionalLight(0xfffbf4, 5)
+sun.position.set(-1.9, 2.9, 1.3)
+sun.castShadow = true
+sun.shadow.mapSize.set(narrow ? 1024 : 2048, narrow ? 1024 : 2048)
+sun.shadow.radius = 1.6
+sun.shadow.blurSamples = 12
+sun.shadow.bias = -0.0003
+sun.shadow.normalBias = 0.002
+const sc = sun.shadow.camera
+sc.left = sc.bottom = -1.4
+sc.right = sc.top = 1.4
+sc.near = 0.5
+sc.far = 8
+rig.add(sun)
+sun.target.position.set(0, 0.3, 0)
+rig.add(sun.target)
+void rect
+const lamp = new THREE.Object3D() // the backlit version's glow disc: gone, kept as a handle for the debug hook
 
-// the lamp itself: a bright soft disc behind the bit, so bloom wraps the silhouette
-const lamp = new THREE.Mesh(
-  new THREE.PlaneGeometry(1.6, 1.6),
-  new THREE.ShaderMaterial({
-    uniforms: { color: { value: LOOK.lamp } },
-    vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */ `
-      uniform vec3 color; varying vec2 vUv;
-      void main() {
-        vec2 c = (vUv - 0.5) * 2.0;
-        float r2 = dot(c, c);
-        float a = exp(-r2 * 6.0) * (1.0 - smoothstep(0.7, 1.0, r2));
-        gl_FragColor = vec4(color * a, 1.0);
-      }`,
-    blending: THREE.AdditiveBlending,
-    transparent: true,
-    depthWrite: false,
-  }),
-)
-lamp.position.set(0.25, 1.08, -1.7) // its core just above the tip, so the halo rims the top and falls off down the bit
-lamp.renderOrder = -1
-rig.add(lamp)
-
-// the shadow: a spot aligned with the lamp, so the cast shadow falls toward the camera
-const spot = new THREE.SpotLight(0xfff0dc, 3, 0, 0.5, 0.6, 2)
-spot.position.set(0.3, 2.6, -1.7) // high behind: a short soft shadow, not a long streak
-spot.castShadow = true
-spot.shadow.mapSize.set(narrow ? 512 : 1024, narrow ? 512 : 1024)
-spot.shadow.radius = 14
-spot.shadow.blurSamples = 16
-spot.shadow.bias = -0.0004
-spot.shadow.camera.near = 0.5
-spot.shadow.camera.far = 8
-rig.add(spot)
-spot.target.position.set(0, 0.25, 0)
-rig.add(spot.target)
 
 const camera = new THREE.PerspectiveCamera(LOOK.fov, 1, 0.01, 100)
 const TARGET = new THREE.Vector3(0, 0.44, 0)
@@ -319,6 +298,52 @@ new THREE.ImageLoader().load(
   () => {}, // no photo: the procedural grain stays
 )
 
+// use marks: a sparse set of fine scratches, mostly along the bit's axis (a bit rides in and out of a
+// holder and a screw head along it), a few across; faint, and thicker ones rarer
+function scratchTexture() {
+  const N = 1024
+  const c = document.createElement('canvas')
+  c.width = c.height = N
+  const g = c.getContext('2d')!
+  g.fillStyle = '#000'
+  g.fillRect(0, 0, N, N)
+  let seed = 1234567
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  g.lineCap = 'round'
+  for (let i = 0; i < 170; i++) {
+    const along = rnd() < 0.8
+    const ang = along ? Math.PI / 2 + (rnd() - 0.5) * 0.35 : rnd() * Math.PI
+    const len = (along ? 60 + rnd() * 260 : 12 + rnd() * 70) * (rnd() < 0.15 ? 1.8 : 1)
+    const x = rnd() * N
+    const y = rnd() * N
+    const dx = Math.cos(ang) * len
+    const dy = Math.sin(ang) * len
+    const grad = g.createLinearGradient(x, y, x + dx, y + dy)
+    const a = 0.25 + rnd() * 0.55
+    grad.addColorStop(0, 'rgba(255,255,255,0)')
+    grad.addColorStop(0.2 + rnd() * 0.2, `rgba(255,255,255,${a})`)
+    grad.addColorStop(0.7 + rnd() * 0.2, `rgba(255,255,255,${a * 0.6})`)
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    g.strokeStyle = grad
+    g.lineWidth = rnd() < 0.85 ? 0.7 + rnd() * 0.6 : 1.4 + rnd() * 0.8
+    g.beginPath()
+    g.moveTo(x, y)
+    g.lineTo(x + dx, y + dy)
+    g.stroke()
+    // wrap across the edges so the texture tiles
+    for (const [ox, oy] of [[-N, 0], [N, 0], [0, -N], [0, N]]) {
+      g.beginPath()
+      g.moveTo(x + ox, y + oy)
+      g.lineTo(x + dx + ox, y + dy + oy)
+      g.stroke()
+    }
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.wrapS = t.wrapT = THREE.RepeatWrapping
+  t.anisotropy = 8
+  return t
+}
+
 const steel = new THREE.MeshStandardMaterial({
   color: LOOK.steel.color, // medium grey tool steel
   metalness: 1,
@@ -327,6 +352,8 @@ const steel = new THREE.MeshStandardMaterial({
 })
 const steelUniforms = {
   detailMap: { value: detail as THREE.Texture },
+  scratchMap: { value: scratchTexture() },
+  scratches: { value: LOOK.detail.scratches },
   detailScale: { value: LOOK.detail.scale },
   detailNormal: { value: LOOK.detail.normal },
   roughVar: { value: LOOK.detail.roughVar },
@@ -334,6 +361,9 @@ const steelUniforms = {
   wearWidth: { value: LOOK.detail.wearWidth },
   wearAmount: { value: LOOK.detail.wearAmount },
   aniso: { value: LOOK.detail.aniso },
+  hexColor: { value: new THREE.Color(LOOK.hex.color) },
+  hexRough: { value: LOOK.hex.roughness },
+  hexZone: { value: new THREE.Vector2(LOOK.hex.from, LOOK.hex.blend) },
   axisView: { value: new THREE.Vector3(0, 1, 0) },
   envRot: { value: new THREE.Matrix3() },
   objToView: { value: new THREE.Matrix3() },
@@ -357,8 +387,8 @@ steel.onBeforeCompile = (shader) => {
     .replace(
       '#include <common>',
       `#include <common>
-      uniform sampler2D detailMap; uniform float detailScale, detailNormal, roughVar, albedoVar, wearWidth, wearAmount, aniso;
-      uniform vec3 axisView;
+      uniform sampler2D detailMap, scratchMap; uniform float scratches, detailScale, detailNormal, roughVar, albedoVar, wearWidth, wearAmount, aniso;
+      uniform vec3 axisView; uniform vec3 hexColor; uniform float hexRough; uniform vec2 hexZone;
       uniform mat3 envRot; uniform mat3 objToView;
       varying vec3 vEdgeDist; varying vec3 vObjPos; varying vec3 vObjNormal;`,
     )
@@ -379,16 +409,23 @@ steel.onBeforeCompile = (shader) => {
       // recesses on the hex shank (the ring groove, the engraving): below the flats' radius they are
       // hidden from most of the room, so they read dark, not as a slit of light
       float rAx = length(vObjPos.xz);
-      float cavity = (1.0 - smoothstep(0.1215, 0.1255, rAx)) * smoothstep(0.02, 0.035, vObjPos.y) * (1.0 - smoothstep(0.54, 0.555, vObjPos.y));
+      float shank = smoothstep(0.02, 0.035, vObjPos.y) * (1.0 - smoothstep(0.48, 0.495, vObjPos.y));
+      float cavity = (1.0 - smoothstep(0.1232, 0.1262, rAx)) * shank; // the engraving, below the flats
+      // use marks: fine scratches, triplanar like the grain (the flats get them along the axis)
+      float scr = texture2D(scratchMap, vObjPos.zy * 1.6 + vec2(0.31, 0.0)).r * tw.x + texture2D(scratchMap, vObjPos.xz * 1.6 + vec2(0.6, 0.2)).r * tw.y + texture2D(scratchMap, vObjPos.xy * 1.6 + vec2(0.05, 0.5)).r * tw.z;
+      scr *= scratches;
       // wear: the sharp edges, worn smoother and brighter, patchily
       float edgeD = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
       float wear = (1.0 - smoothstep(0.0, wearWidth, edgeD)) * smoothstep(0.25, 0.8, det.a + 0.25) * wearAmount;
-      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity);`,
+      // two finishes: the satin hex shank, the polished neck and tip
+      float onHex = 1.0 - smoothstep(hexZone.x - hexZone.y, hexZone.x + hexZone.y, vObjPos.y);
+      diffuseColor.rgb = mix(diffuseColor.rgb, hexColor, onHex);
+      diffuseColor.rgb *= (1.0 + (det.a - 0.5) * albedoVar + (mottle - 0.5) * albedoVar * 0.8 + (det.b - 0.5) * albedoVar * 0.5) * (1.0 + 0.08 * wear) * (1.0 - 0.72 * cavity) * (1.0 + 0.55 * scr);`,
     )
     .replace(
       '#include <roughnessmap_fragment>',
       `#include <roughnessmap_fragment>
-      roughnessFactor = clamp(roughnessFactor + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear + 0.45 * cavity, 0.08, 1.0);`,
+      roughnessFactor = clamp(mix(roughnessFactor, hexRough, onHex) + (det.b - 0.5) * roughVar + (mottle - 0.5) * 0.03 - 0.04 * wear + 0.45 * cavity + 0.22 * scr, 0.08, 1.0);`,
     )
     .replace(
       '#include <normal_fragment_maps>',
@@ -509,7 +546,7 @@ function contactTexture() {
   g.fillRect(0, 0, 128, 128)
   return new THREE.CanvasTexture(c)
 }
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ color: 0x1a1816, opacity: 0.3, depthWrite: false }))
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.ShadowMaterial({ color: 0x23272e, opacity: 0.55, depthWrite: false }))
 floor.rotation.x = -Math.PI / 2
 floor.receiveShadow = true
 scene.add(floor)
@@ -531,7 +568,7 @@ new STLLoader().load('/assets/models/bit.stl', (geo) => {
   const s = 1 / size.y
   geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2)
   geo.scale(s, s, s)
-  creased(geo, 32)
+  creased(geo, 12) // the turned surfaces are fine enough (256 segments) to smooth at 12°; flats and ramps stay crisp
   edgeDistances(geo, 18)
   const mesh = new THREE.Mesh(geo, steel)
   mesh.castShadow = true
@@ -731,7 +768,7 @@ const target = new THREE.WebGLMultisampleRenderTarget(1, 1, {
   type: hdr ? THREE.HalfFloatType : THREE.UnsignedByteType,
   encoding: THREE.LinearEncoding,
 })
-target.samples = narrow ? 2 : 4
+target.samples = 4
 const composer = new EffectComposer(renderer, target)
 composer.addPass(new RenderPass(scene, camera))
 const bloom = new BloomTexturePass(LOOK.bloom.strength, LOOK.bloom.radius, LOOK.bloom.threshold)
@@ -750,7 +787,7 @@ function resize() {
   composer.setSize(w, h)
   lens.uniforms.resolution.value.set(w * dpr, h * dpr)
   camera.aspect = w / h
-  camera.fov = w < h ? LOOK.fov - 5 : LOOK.fov // portrait: a touch tighter, the bit a little larger
+  camera.fov = w < h ? LOOK.fov + 10 : LOOK.fov // portrait: a touch wider, so the bit keeps some air on a narrow screen
   camera.updateProjectionMatrix()
 }
 
