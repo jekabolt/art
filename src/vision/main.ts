@@ -8,6 +8,7 @@
 // and it keeps turning a while after the finger lets go, so the strokes squeeze, go edge-on and
 // vanish into the ground. The pointer is heat, burning the ground yellow and white around it. The
 // map is 80 pixels across.
+import '../core/embed'
 import { logoBars } from '../core/logo-bars'
 import { LOGO_STROKE } from '../core/logo-path'
 import './vision.css'

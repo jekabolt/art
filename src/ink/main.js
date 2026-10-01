@@ -1,5 +1,6 @@
 // INK (2024): the logo under a WebGL fluid — the pointer stirs ink over it.
 // Fluid solver from "webgl-fluid-simulation-with-your-text" (MIT), logo swapped for the 2026 mark.
+import { EMBEDDED } from '../core/embed'
 import './style.css'
 
 const canvasEl = document.querySelector("canvas");
@@ -324,11 +325,12 @@ function setupEvents() {
         updateMousePosition(e.pageX, e.pageY);
     });
 
+    // embedded: passive, so a vertical swipe scrolls the host page and still stirs the ink
     canvasEl.addEventListener("touchmove", (e) => {
-        e.preventDefault();
+        if (!EMBEDDED) e.preventDefault();
         isPreview = false;
         updateMousePosition(e.targetTouches[0].pageX, e.targetTouches[0].pageY);
-    });
+    }, { passive: EMBEDDED });
 }
 
 function updateMousePosition(eX, eY) {

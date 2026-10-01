@@ -9,6 +9,7 @@
 // One fragment shader. The mark's recent positions and angles live in a small float texture, one
 // texel per frame; each pixel picks its moment, blends the two nearest frames, and tests the exact
 // distance to the mark at that pose.
+import '../core/embed'
 import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
 import { Scene } from 'three/src/scenes/Scene'
 import { OrthographicCamera } from 'three/src/cameras/OrthographicCamera'

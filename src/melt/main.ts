@@ -2,6 +2,7 @@
 // finger leaves a trail in a velocity field; the field smears the logo along the motion, lets it drip
 // down a little, splits the colour channels and lights the smear with an oil-film rainbow. The trail
 // spreads and fades on its own, so the logo sets back into shape when left alone.
+import '../core/embed'
 import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
 import { WebGLRenderTarget } from 'three/src/renderers/WebGLRenderTarget'
 import { Scene } from 'three/src/scenes/Scene'

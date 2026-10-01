@@ -15,6 +15,7 @@
 // unsharp mask, sensor noise and sRGB.
 //
 // Textures (optional, procedural fallbacks if absent): see GRAIN_URL and ENV_URL.
+import '../core/embed'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'

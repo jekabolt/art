@@ -5,6 +5,7 @@
 // the corners. A finished drawing keeps boiling (redrawn twelve times a second, as hand-drawn
 // animation does) until the next one starts on a clean sheet.
 // Every tap makes the pen faster (×1.6, up to ×12); left alone it slows back to its own pace.
+import '../core/embed'
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './oneline.css'
 

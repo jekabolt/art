@@ -7,6 +7,7 @@
 //
 // One fragment shader. The mark is the exact signed distance to its bars, and dots are sliced by it
 // with a one-pixel antialiased edge.
+import '../core/embed'
 import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
 import { Scene } from 'three/src/scenes/Scene'
 import { OrthographicCamera } from 'three/src/cameras/OrthographicCamera'

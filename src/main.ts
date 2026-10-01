@@ -1,3 +1,4 @@
+import './core/embed'
 import { Con } from './con/con'
 import { isWhiteLogo } from './core/route'
 import './fonts/fonts.css'

@@ -1,0 +1,1 @@
+const t=(()=>{try{return window.self!==window.top}catch{return!0}})();if(t){document.documentElement.classList.add("embedded");const e=document.createElement("style");e.textContent="html.embedded, html.embedded * { touch-action: pan-y !important; }",document.head.appendChild(e)}export{t as E};

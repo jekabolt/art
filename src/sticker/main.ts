@@ -2,6 +2,7 @@
 // paper rolls the print up into a scroll from the right edge (drag left) and back (drag right);
 // dragging beside the paper turns it in 3D; the wheel / trackpad rolls too. Nothing moves by itself.
 // No lights, no shadows: flat white paper, flat black ink.
+import { EMBEDDED } from '../core/embed'
 import { PerspectiveCamera } from 'three/src/cameras/PerspectiveCamera'
 import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
 import { Scene } from 'three/src/scenes/Scene'
@@ -161,7 +162,8 @@ const release = () => {
 canvas.addEventListener('pointerup', release)
 canvas.addEventListener('pointercancel', release)
 
-window.addEventListener(
+// embedded: the wheel scrolls the host page (see core/embed)
+if (!EMBEDDED) window.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault()

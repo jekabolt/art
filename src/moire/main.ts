@@ -5,6 +5,7 @@
 // goes solid — so the mark appears only through the overlap, and as the upper layer turns a degree
 // or slides a line, moiré fringes sweep the field and break at the mark's edge, showing it, hiding
 // it, turning it inside out. A tap changes the family of lines: straight, rings, a fan of rays.
+import '../core/embed'
 import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
 import { Scene } from 'three/src/scenes/Scene'
 import { OrthographicCamera } from 'three/src/cameras/OrthographicCamera'

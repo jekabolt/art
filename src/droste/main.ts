@@ -7,6 +7,7 @@
 // its bars, antialiased with the transform's own derivative (|β|·|p − c| / |z|), so it is crisp at
 // every depth and has no seams. It keeps sinking in by itself; drag across to turn it, drag up and
 // down or scroll to go deeper or come back out.
+import { EMBEDDED } from '../core/embed'
 import { WebGLRenderer } from 'three/src/renderers/WebGLRenderer'
 import { Scene } from 'three/src/scenes/Scene'
 import { OrthographicCamera } from 'three/src/cameras/OrthographicCamera'
@@ -169,7 +170,8 @@ const up = () => {
 }
 canvas.addEventListener('pointerup', up)
 canvas.addEventListener('pointercancel', up)
-window.addEventListener(
+// embedded: the wheel scrolls the host page (see core/embed)
+if (!EMBEDDED) window.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault()

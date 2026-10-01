@@ -1,6 +1,7 @@
 // SLIT-SCAN (2025): the webcam, mirrored, black and white at double contrast. The left 20 % is live;
 // every frame the rest of the picture moves one pixel right and the live edge column is copied in,
 // so whatever passes the edge is smeared across time. The logo button saves the frame as a PNG.
+import '../core/embed'
 import '../fonts/fonts.css'
 import '../site.css'
 import './slit.css'

@@ -6,6 +6,7 @@
 //
 // Left alone, every turn adds circles, then it starts again from one. Swipe (or scroll) to add or
 // take away circles yourself.
+import { EMBEDDED } from '../core/embed'
 import { pathSegments, type Seg } from '../core/logo-bars'
 import { LOGO_STROKE } from '../core/logo-path'
 import './fourier.css'
@@ -253,7 +254,8 @@ canvas.addEventListener('pointermove', (e) => {
 const up = () => (drag = null)
 canvas.addEventListener('pointerup', up)
 canvas.addEventListener('pointercancel', up)
-window.addEventListener(
+// embedded: the wheel scrolls the host page (see core/embed)
+if (!EMBEDDED) window.addEventListener(
   'wheel',
   (e) => {
     e.preventDefault()

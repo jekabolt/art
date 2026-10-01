@@ -1,5 +1,6 @@
 // FLAG (2024): the logo as a cloth pinned on the left, blown by the wind; grab it and pull.
 // Verlet cloth on a 2D canvas, each quad drawn as two affine-warped triangles of the logo.
+import '../core/embed'
 import './style.css'
 
 var canvas = document.getElementById("canvas");
