@@ -90,22 +90,24 @@
 /*
  * The text strip continues the card downwards: one character per card column, each letter right
  * under its column. Card units: 1875 wide, columns start at 58 and step 22; a FeatureMono glyph
- * advances 0.6 em, so at font-size = one column the glyph is 0.6 col and letter-spacing adds 0.4.
+ * advances 0.6 em; letter-spacing tops each glyph up to a full column, and the left padding
+ * centres it there. The type stays at the site's 12 px at most.
  */
 .site .punch-strip {
     --col: calc(100cqw * 22 / 1875);
+    --fs: min(var(--col), 12px);
     display: block;
     width: 100%;
-    height: max(40px, calc(var(--col) * 2.6));
-    padding: 0 0 0 calc(100cqw * 58 / 1875 + var(--col) * 0.2 - 1px); /* - the left border */
+    height: 40px;
+    padding: 0 0 0 calc(100cqw * 58 / 1875 + (var(--col) - var(--fs) * 0.6) / 2 - 1px); /* - the left border */
     border: 1px solid var(--ink);
     border-top: 0;
     background:
         repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px var(--col))
         calc(100cqw * 58 / 1875) 100% / calc(var(--col) * 80 + 1px) 4px no-repeat,
         var(--paper);
-    font-size: var(--col);
-    letter-spacing: calc(var(--col) * 0.4);
+    font-size: var(--fs);
+    letter-spacing: calc(var(--col) - var(--fs) * 0.6);
     text-transform: none;
 }
 
@@ -136,10 +138,10 @@
 /* Phone: a column is ~4 px, too small to type into; the strip turns into a plain field. */
 @container (max-width: 599px) {
     .site .punch-strip {
-        height: 44px;
+        height: 40px;
         padding: 0 10px;
         background: var(--paper);
-        font-size: 16px;
+        font-size: 12px;
         letter-spacing: 0.08em;
     }
 }
