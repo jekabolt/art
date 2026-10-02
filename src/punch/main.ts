@@ -65,7 +65,7 @@ function renderSize() {
   wEl.classList.toggle('is-set', size.kind === 'side' && size.side === 'w')
   hEl.classList.toggle('is-set', size.kind === 'side' && size.side === 'h')
   noteEl.textContent = r.ok
-    ? `${round1(r.wCm)} × ${round1(r.hCm)} cm · vector`
+    ? ''
     : Number.isFinite(r.scale)
       ? `sides must stay between ${MIN_CM} and ${MAX_CM} cm`
       : 'type the size in cm, e.g. 30 or 29.7'
