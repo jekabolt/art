@@ -1,5 +1,5 @@
-// The same primitive list, drawn twice: as SVG on screen and as a vector PDF for download.
-// jsPDF is loaded only when the button is pressed; the page itself never pulls it.
+// The same primitive list, drawn three times: as SVG on screen, and as a vector PDF or SVG file
+// for download. jsPDF is loaded only when the pdf button is pressed; the page never pulls it.
 import fontUrl from '../fonts/FeatureMono-Regular.ttf?url'
 import { CARD_H, CARD_W } from './card'
 import type { Prim } from './card'
@@ -7,9 +7,8 @@ import type { Prim } from './card'
 const SVG_NS = 'http://www.w3.org/2000/svg'
 const FAMILY = 'FeatureMono'
 
-export function renderSvg(svg: SVGSVGElement, prims: Prim[]): void {
-  svg.setAttribute('viewBox', `0 0 ${CARD_W} ${CARD_H}`)
-  const nodes: SVGElement[] = prims.map((p) => {
+function primNodes(prims: Prim[]): SVGElement[] {
+  return prims.map((p) => {
     if (p.kind === 'rect') {
       const el = document.createElementNS(SVG_NS, 'rect')
       el.setAttribute('x', String(p.x))
@@ -33,7 +32,25 @@ export function renderSvg(svg: SVGSVGElement, prims: Prim[]): void {
     el.textContent = p.text
     return el
   })
-  svg.replaceChildren(...nodes)
+}
+
+export function renderSvg(svg: SVGSVGElement, prims: Prim[]): void {
+  svg.setAttribute('viewBox', `0 0 ${CARD_W} ${CARD_H}`)
+  svg.replaceChildren(...primNodes(prims))
+}
+
+const fetchFont = () =>
+  fetch(fontUrl).then((r) => {
+    if (!r.ok) throw new Error(`font ${r.status}`)
+    return r.arrayBuffer()
+  })
+
+const save = (blob: Blob, fileName: string) => {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = fileName
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 0)
 }
 
 const toBase64 = (buf: ArrayBuffer) => {
@@ -49,10 +66,7 @@ const toBase64 = (buf: ArrayBuffer) => {
 export async function downloadPdf(prims: Prim[], wPt: number, hPt: number, fileName: string) {
   const [{ jsPDF }, font] = await Promise.all([
     import('jspdf'),
-    fetch(fontUrl).then((r) => {
-      if (!r.ok) throw new Error(`font ${r.status}`)
-      return r.arrayBuffer()
-    }),
+    fetchFont(),
   ])
   const k = wPt / CARD_W
   const pdf = new jsPDF({
@@ -85,4 +99,20 @@ export async function downloadPdf(prims: Prim[], wPt: number, hPt: number, fileN
     }
   }
   pdf.save(fileName)
+}
+
+/** Standalone SVG: physical size in cm, card units in the viewBox, the font embedded. */
+export async function downloadSvg(prims: Prim[], wCm: number, hCm: number, fileName: string) {
+  const font = toBase64(await fetchFont())
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('xmlns', SVG_NS)
+  svg.setAttribute('width', `${wCm}cm`)
+  svg.setAttribute('height', `${hCm}cm`)
+  svg.setAttribute('viewBox', `0 0 ${CARD_W} ${CARD_H}`)
+  svg.setAttribute('font-family', FAMILY)
+  const style = document.createElementNS(SVG_NS, 'style')
+  style.textContent = `@font-face{font-family:'${FAMILY}';src:url(data:font/ttf;base64,${font}) format('truetype')}`
+  svg.append(style, ...primNodes(prims))
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svg)
+  save(new Blob([xml], { type: 'image/svg+xml' }), fileName)
 }

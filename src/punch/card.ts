@@ -44,7 +44,9 @@ const glyph = (col: number, y: number, size: number, fill: string, text: string)
   text,
 })
 
-export function cardPrims(text: string): Prim[] {
+/** `frame: false` leaves out the 1 pt edge: on screen it shrinks below a pixel and the
+ *  antialiasing erases a side, so the page draws it as a CSS outline instead. */
+export function cardPrims(text: string, frame = true): Prim[] {
   const out: Prim[] = [
     { kind: 'rect', x: 0, y: 0, w: CARD_W, h: CARD_H, fill: PAPER },
     // Cut corner and the tab on the right, both from the artwork.
@@ -85,7 +87,7 @@ export function cardPrims(text: string): Prim[] {
   })
 
   // 1 pt frame on the edge of the card.
-  out.push(
+  if (frame) out.push(
     { kind: 'rect', x: 0, y: 0, w: CARD_W, h: 1, fill: INK },
     { kind: 'rect', x: 0, y: CARD_H - 1, w: CARD_W, h: 1, fill: INK },
     { kind: 'rect', x: 0, y: 0, w: 1, h: CARD_H, fill: INK },

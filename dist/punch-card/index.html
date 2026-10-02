@@ -23,10 +23,10 @@
     <meta name="twitter:title" content="GRBPWR — Punch Card" />
     <meta name="twitter:description" content="Generative studies of the GRBPWR mark." />
     <meta name="twitter:image" content="https://art.grbpwr.com/og.png" />
-  <script type="module" crossorigin src="/assets/index.45842741.js"></script>
+  <script type="module" crossorigin src="/assets/index.09cab877.js"></script>
   <link rel="modulepreload" href="/assets/modulepreload-polyfill.b7f2da20.js">
   <link rel="modulepreload" href="/assets/preload-helper.8b70a8dd.js">
-  <link rel="stylesheet" href="/assets/index.e048ef1b.css">
+  <link rel="stylesheet" href="/assets/index.b45185f7.css">
   <link rel="stylesheet" href="/assets/fonts.1580bea8.css">
   <link rel="stylesheet" href="/assets/site.6e128e7e.css">
 </head>
@@ -46,7 +46,7 @@
         <p id="hint" class="punch-hint" aria-live="polite"></p>
 
         <div class="punch-tools">
-            <span class="punch-label">pdf size</span>
+            <span class="punch-label">size</span>
             <button id="size-original" type="button" class="chip" aria-pressed="true">original</button>
             <span class="punch-sides">
                 <label class="punch-side">w <input id="size-w" type="text" inputmode="decimal" aria-label="width, cm" /></label>
@@ -54,7 +54,11 @@
                 <label class="punch-side">h <input id="size-h" type="text" inputmode="decimal" aria-label="height, cm" /></label>
                 <span>cm</span>
             </span>
-            <button id="download" type="button" class="button">download pdf</button>
+            <span id="download-box" class="punch-dl">
+                <button id="download" type="button" class="button" aria-expanded="false">download</button>
+                <button id="download-pdf" type="button" class="button" data-format="pdf" hidden>pdf</button>
+                <button id="download-svg" type="button" class="button" data-format="svg" hidden>svg</button>
+            </span>
         </div>
         <p id="size-note" class="punch-note" aria-live="polite"></p>
 

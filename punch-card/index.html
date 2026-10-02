@@ -40,7 +40,7 @@
         <p id="hint" class="punch-hint" aria-live="polite"></p>
 
         <div class="punch-tools">
-            <span class="punch-label">pdf size</span>
+            <span class="punch-label">size</span>
             <button id="size-original" type="button" class="chip" aria-pressed="true">original</button>
             <span class="punch-sides">
                 <label class="punch-side">w <input id="size-w" type="text" inputmode="decimal" aria-label="width, cm" /></label>
@@ -48,7 +48,11 @@
                 <label class="punch-side">h <input id="size-h" type="text" inputmode="decimal" aria-label="height, cm" /></label>
                 <span>cm</span>
             </span>
-            <button id="download" type="button" class="button">download pdf</button>
+            <span id="download-box" class="punch-dl">
+                <button id="download" type="button" class="button" aria-expanded="false">download</button>
+                <button id="download-pdf" type="button" class="button" data-format="pdf" hidden>pdf</button>
+                <button id="download-svg" type="button" class="button" data-format="svg" hidden>svg</button>
+            </span>
         </div>
         <p id="size-note" class="punch-note" aria-live="polite"></p>
 

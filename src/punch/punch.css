@@ -83,7 +83,9 @@
     color: var(--ink);
 }
 
-.punch-tools .button {
+.punch-dl {
+    display: inline-flex;
+    gap: 8px;
     margin-left: auto;
 }
 
@@ -105,6 +107,9 @@
     width: 100%;
     height: auto;
     aspect-ratio: 1875 / 827.5;
+    /* The card's 1 pt edge, kept at one screen pixel at any width (the file still has it in pt). */
+    outline: 1px solid #000;
+    outline-offset: -1px;
     font-family: 'FeatureMono', ui-monospace, monospace;
     text-transform: none;
 }
@@ -118,8 +123,12 @@
 }
 
 @media (max-width: 599px) {
-    .punch-tools .button {
+    .punch-dl {
         width: 100%;
         margin-left: 0;
+    }
+
+    .punch-dl .button {
+        flex: 1;
     }
 }
