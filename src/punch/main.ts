@@ -7,19 +7,21 @@ import { COLUMNS, normalize } from './encode'
 import { MAX_CM, MIN_CM, formatSize, parseCm, parseSize, ptOf, resolveSize, round1 } from './size'
 import type { SizeChoice } from './size'
 
-const DEFAULT_TEXT = 'GRBPWR / CRITICAL PATH BLAZER / 2026.1'
+const DEFAULT_TEXT = ''
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 
 const textEl = $<HTMLInputElement>('text')
 const countEl = $<HTMLElement>('count')
 const hintEl = $<HTMLElement>('hint')
+const clearEl = $<HTMLButtonElement>('clear')
 const origEl = $<HTMLButtonElement>('size-original')
 const wEl = $<HTMLInputElement>('size-w')
 const hEl = $<HTMLInputElement>('size-h')
 const noteEl = $<HTMLElement>('size-note')
 const dlEl = $<HTMLButtonElement>('download')
 const dlBoxEl = $<HTMLElement>('download-box')
+const dlSlots = { wide: $<HTMLElement>('download-slot'), phone: $<HTMLElement>('download-slot-phone') }
 const formatEls = [$<HTMLButtonElement>('download-pdf'), $<HTMLButtonElement>('download-svg')]
 const svgEl = document.getElementById('card') as unknown as SVGSVGElement
 
@@ -80,6 +82,7 @@ function renderSize() {
   }
   // The file is built from what was on screen at the click: nothing changes until it is saved.
   for (const el of [textEl, origEl, wEl, hEl]) el.disabled = busy
+  clearEl.disabled = text === '' || busy
 }
 
 function onText() {
@@ -107,6 +110,19 @@ function onSide(side: 'w' | 'h', el: HTMLInputElement) {
 // No maxlength: the browser counts UTF-16 units before normalize() drops what cannot be punched.
 textEl.value = text
 textEl.addEventListener('input', onText)
+
+clearEl.addEventListener('click', () => {
+  textEl.value = ''
+  onText()
+  textEl.focus()
+})
+
+// The card itself points at the strip: a click on it puts the caret at the end of the text.
+svgEl.addEventListener('click', () => {
+  if (busy) return
+  textEl.focus()
+  textEl.setSelectionRange(textEl.value.length, textEl.value.length)
+})
 
 origEl.addEventListener('click', () => {
   size = { kind: 'original' }
@@ -164,6 +180,12 @@ for (const el of formatEls) {
     }
   })
 }
+
+// Phone: download goes under the text field; wider screens keep it in the size row.
+const phone = matchMedia('(max-width: 599px)')
+const placeDownload = () => (phone.matches ? dlSlots.phone : dlSlots.wide).append(dlBoxEl)
+phone.addEventListener('change', placeDownload)
+placeDownload()
 
 renderCard()
 renderSize()

@@ -5,50 +5,6 @@
     padding: 0 var(--gutter) var(--gutter);
 }
 
-.punch-field {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid var(--line);
-}
-
-.punch-field:focus-within {
-    box-shadow: 0 1px 0 var(--ink);
-}
-
-.punch-field label {
-    flex: none;
-}
-
-.punch-field input {
-    flex: 1;
-    min-width: 0;
-    height: 40px;
-    border: 0;
-    background: transparent;
-    font-size: 16px;
-    letter-spacing: 0.08em;
-}
-
-.punch-field input:focus-visible {
-    outline: none;
-}
-
-.punch-count,
-.punch-note,
-.punch-label {
-    color: var(--muted);
-}
-
-.punch-count {
-    flex: none;
-}
-
-.punch-hint {
-    min-height: 1.4em;
-    color: var(--error);
-}
-
 .punch-tools {
     display: flex;
     flex-wrap: wrap;
@@ -83,10 +39,13 @@
     color: var(--ink);
 }
 
+.punch-dl-slot {
+    margin-left: auto;
+}
+
 .punch-dl {
     display: inline-flex;
     gap: 8px;
-    margin-left: auto;
 }
 
 .punch-note {
@@ -102,30 +61,98 @@
     padding-top: 12px;
 }
 
-.punch-card {
-    display: block;
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1875 / 827.5;
-    /* The card's 1 pt edge, kept at one screen pixel at any width (the file still has it in pt). */
-    outline: 1px solid #000;
-    outline-offset: -1px;
-    font-family: 'FeatureMono', ui-monospace, monospace;
-    text-transform: none;
+/* Card + the strip under it share one width, so the strip can be measured in card columns. */
+.punch-deck {
+    container-type: inline-size;
 }
 
 /* Desktop: the card a bit smaller than the full width, centred. */
 @media (min-width: 1024px) {
-    .punch-card {
+    .punch-deck {
         width: 85%;
         margin-inline: auto;
     }
 }
 
+.punch-card {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1875 / 827.5;
+    font-family: 'FeatureMono', ui-monospace, monospace;
+    text-transform: none;
+    cursor: text;
+    /* The card's 1 pt edge, kept at one screen pixel at any width (the file still has it in pt). */
+    outline: 1px solid #000;
+    outline-offset: -1px;
+}
+
+/*
+ * The text strip continues the card downwards: one character per card column, each letter right
+ * under its column. Card units: 1875 wide, columns start at 58 and step 22; a FeatureMono glyph
+ * advances 0.6 em, so at font-size = one column the glyph is 0.6 col and letter-spacing adds 0.4.
+ */
+.site .punch-strip {
+    --col: calc(100cqw * 22 / 1875);
+    display: block;
+    width: 100%;
+    height: max(40px, calc(var(--col) * 2.6));
+    padding: 0 0 0 calc(100cqw * 58 / 1875 + var(--col) * 0.2 - 1px); /* - the left border */
+    border: 1px solid var(--ink);
+    border-top: 0;
+    background:
+        repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px var(--col))
+        calc(100cqw * 58 / 1875) 100% / calc(var(--col) * 80 + 1px) 4px no-repeat,
+        var(--paper);
+    font-size: var(--col);
+    letter-spacing: calc(var(--col) * 0.4);
+    text-transform: none;
+}
+
+.site .punch-strip::placeholder {
+    color: var(--muted);
+    letter-spacing: normal;
+    text-transform: uppercase;
+}
+
+.site .punch-strip:focus-visible {
+    outline: none;
+    background-color: #f4f4f4;
+}
+
+.punch-under {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 8px;
+}
+
+.punch-hint {
+    flex: 1;
+    min-width: 0;
+    color: var(--error);
+}
+
+/* Phone: a column is ~4 px, too small to type into; the strip turns into a plain field. */
+@container (max-width: 599px) {
+    .site .punch-strip {
+        height: 44px;
+        padding: 0 10px;
+        background: var(--paper);
+        font-size: 16px;
+        letter-spacing: 0.08em;
+    }
+}
+
 @media (max-width: 599px) {
+    /* Phone: download sits under the text field (moved there by main.ts). */
+    .punch-dl-phone {
+        padding-top: 12px;
+    }
+
     .punch-dl {
+        display: flex;
         width: 100%;
-        margin-left: 0;
     }
 
     .punch-dl .button {

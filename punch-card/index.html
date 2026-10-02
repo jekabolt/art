@@ -32,13 +32,6 @@
     </header>
 
     <main class="punch">
-        <div class="punch-field">
-            <label for="text">text</label>
-            <input id="text" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" />
-            <span id="count" class="punch-count"></span>
-        </div>
-        <p id="hint" class="punch-hint" aria-live="polite"></p>
-
         <div class="punch-tools">
             <span class="punch-label">size</span>
             <button id="size-original" type="button" class="chip" aria-pressed="true">original</button>
@@ -48,16 +41,25 @@
                 <label class="punch-side">h <input id="size-h" type="text" inputmode="decimal" aria-label="height, cm" /></label>
                 <span>cm</span>
             </span>
-            <span id="download-box" class="punch-dl">
+            <span id="download-slot" class="punch-dl-slot"><span id="download-box" class="punch-dl">
                 <button id="download" type="button" class="button" aria-expanded="false">download</button>
                 <button id="download-pdf" type="button" class="button" data-format="pdf" hidden>pdf</button>
                 <button id="download-svg" type="button" class="button" data-format="svg" hidden>svg</button>
-            </span>
+            </span></span>
         </div>
         <p id="size-note" class="punch-note" aria-live="polite"></p>
 
         <div class="punch-stage">
-            <svg id="card" class="punch-card" role="img" aria-label="punch card preview" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div class="punch-deck">
+                <svg id="card" class="punch-card" role="img" aria-label="punch card preview" xmlns="http://www.w3.org/2000/svg"></svg>
+                <input id="text" class="punch-strip" type="text" aria-label="text on the card" placeholder="type here" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+                <div class="punch-under">
+                    <p id="hint" class="punch-hint" aria-live="polite"></p>
+                    <span id="count" class="punch-count"></span>
+                    <button id="clear" type="button" class="chip">clear</button>
+                </div>
+                <div id="download-slot-phone" class="punch-dl-phone"></div>
+            </div>
         </div>
     </main>
 
