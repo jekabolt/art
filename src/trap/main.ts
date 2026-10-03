@@ -1,9 +1,12 @@
 // TRAP: a fractal in two flat colours, blue and white. Every point of the plane is iterated through
-// z → z² + c (a Julia set); the logo sits at the origin as an orbit trap, and a point turns white the
-// moment its orbit falls on one of the mark's strokes. So the logo is caught again and again, bent and
-// shrunk along the set's coastline, and everything else, inside the set or out, is blue.
+// z → z² + c (a Julia set); the logo sits at the origin as an orbit trap. A point's colour is the
+// parity of how many times its orbit lands on the mark's strokes: once (the logo itself, or any of
+// its bent copies along the set's coastline) is white, twice is blue again, and so on — so where the
+// copies nest and overlap they turn each other negative, and the lace stays flat and legible.
+// The figure grows in layers: the logo alone, then its first copies, then theirs, seven deep.
 // Drag moves c and the whole figure melts and re-forms under the finger; a tap glides c to another
-// of a handful of shapes. Left alone, c drifts slowly round a small circle so it never stands still.
+// of a handful of shapes and grows it again from the logo. Left alone, c drifts slowly round a small
+// circle so it never stands still.
 import '../core/embed'
 import { EMBEDDED } from '../core/embed'
 import * as THREE from 'three'
@@ -15,6 +18,8 @@ const LOOK = {
   view: 3.0, // the plane's width across the shorter side of the screen
   trap: 0.9, // the logo's width in the plane
   iters: 80,
+  layers: 7, // landings that count: the logo (the orbit's start) and six generations of copies
+  grow: 0.32, // seconds a layer takes to appear
   // c values with good coastlines
   shapes: [
     [-0.8, 0.156],
@@ -54,6 +59,7 @@ const uniforms = {
   c: { value: new THREE.Vector2(...LOOK.shapes[0]) },
   view: { value: LOOK.view },
   trap: { value: LOOK.trap },
+  depth: { value: 1 }, // how many layers of landings count (grows to LOOK.layers)
 }
 const mat = new THREE.ShaderMaterial({
   uniforms,
@@ -61,19 +67,20 @@ const mat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */ `
     uniform sampler2D logo;
     uniform vec2 res, c;
-    uniform float view, trap;
-    // 1 when the point's orbit lands on the mark, else 0
+    uniform float view, trap, depth;
+    // the parity of the orbit's landings on the mark, counting the first depth steps (step 0 is
+    // the point itself, so the logo stands whole in the middle): 1 white, 0 blue
     float caught(vec2 p) {
       vec2 z = (p - res * 0.5) / min(res.x, res.y) * view;
-      for (int i = 0; i < ${LOOK.iters}; i++) {
+      float hits = 0.0;
+      for (int i = 0; i < ${LOOK.layers}; i++) {
+        if (float(i) >= depth) break;
+        vec2 uv = z / trap + 0.5; // y up, as the texture (flipped on upload) has it
+        if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0 && texture2D(logo, uv).a > 0.5) hits += 1.0;
         z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-        if (dot(z, z) > 16.0) return 0.0;
-        if (i >= 7) continue; // only the first few landings: the mark and its first preimages
-        vec2 uv = z / trap + 0.5;
-        uv.y = 1.0 - uv.y;
-        if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0 && texture2D(logo, uv).a > 0.5) return 1.0;
+        if (dot(z, z) > 16.0) break;
       }
-      return 0.0;
+      return mod(hits, 2.0);
     }
     void main() {
       // four samples a pixel, so the coastline is smooth
@@ -120,11 +127,19 @@ const up = (e: PointerEvent) => {
   from = [...home]
   home = [...LOOK.shapes[shape]]
   glideAt = performance.now()
-  haptic([10, 30, 10])
+  grow()
 }
 canvas.addEventListener('pointerup', up)
 canvas.addEventListener('pointercancel', up)
 if (!EMBEDDED) addEventListener('touchmove', (e) => e.preventDefault(), { passive: false })
+
+// growth: the layers appear one at a time, a tick on each
+let growAt = performance.now()
+function grow() {
+  growAt = performance.now()
+  const gap = LOOK.grow * 1000
+  haptic(Array.from({ length: LOOK.layers * 2 - 1 }, (_, i) => (i % 2 ? gap - 10 : 10)))
+}
 
 const t0 = performance.now()
 function frame(now: number) {
@@ -138,6 +153,7 @@ function frame(now: number) {
     cy = from[1] + (home[1] - from[1]) * e
     if (k >= 1) glideAt = -1
   }
+  uniforms.depth.value = Math.min(LOOK.layers, 1 + Math.floor((now - growAt) / 1000 / LOOK.grow))
   uniforms.c.value.set(cx + Math.cos(t * 0.23) * 0.012, cy + Math.sin(t * 0.31) * 0.012)
   renderer.render(scene, camera)
   requestAnimationFrame(frame)

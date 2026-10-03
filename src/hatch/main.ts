@@ -11,7 +11,7 @@ import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './hatch.css'
 
 const LOOK = {
-  size: 0.3, // the cube's half-edge, a share of the screen's shorter side
+  size: [0.3, 0.22], // the cube's half-edge, a share of the screen's shorter side: phone, desktop
   lines: Math.min(innerWidth, innerHeight) < 600 ? 44 : 64, // hatch lines across a face
   dash: 0.032, // a dash, in half-edges
   logo: 0.84, // the logo's width on the front face, a share of the face
@@ -162,7 +162,7 @@ function resize() {
   H = innerHeight
   canvas.width = Math.round(W * dpr)
   canvas.height = Math.round(H * dpr)
-  scale = Math.min(W, H) * LOOK.size
+  scale = Math.min(W, H) * LOOK.size[Math.min(W, H) < 600 ? 0 : 1]
   makePaper(canvas.width, canvas.height)
 }
 addEventListener('resize', resize)
