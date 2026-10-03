@@ -10,6 +10,10 @@ import { Util } from '../libs/util';
 import { Param } from '../core/param';
 import { MousePointer } from '../core/mousePointer';
 import { Conf } from '../core/conf';
+import { haptic, hapticWhileDragging } from '../core/haptic';
+
+/** Folds of the bellows in a full stretch: on Android each one clicks under the finger. */
+const FOLDS = 12;
 
 
 export class Visual extends Canvas {
@@ -18,6 +22,8 @@ export class Visual extends Canvas {
   private _left: BaseItem
   private _right: BaseItem
   private _hokan: Array<Mesh> = []
+  private _fold = -1
+  private _stretch = 0
 
   constructor(opt: any) {
     super(opt);
@@ -50,6 +56,11 @@ export class Visual extends Canvas {
       this._hokan.push(hokan)
     }
 
+    // The bellows under the finger: a tick as it lands and as it lets go (an iPhone allows nothing in
+    // between), and on letting go of a well-stretched bellows a short breath out (Android).
+    window.addEventListener('pointerdown', () => haptic(8))
+    window.addEventListener('pointerup', () => haptic(this._stretch > 0.5 ? [14, 40, 10, 40, 6] : 8))
+
     console.log(Param.instance.fps)
     this._resize();
   }
@@ -73,6 +84,12 @@ export class Visual extends Canvas {
     this._right.scale.set(size, size, 1)
     this._right.position.y = this._left.position.y * -1
     this._right.position.x = this._left.position.x * -1
+
+    // a click for every fold the bellows opens or closes while the finger drags it
+    this._stretch = Math.min(1, Math.sqrt(mx * mx + my * my))
+    const fold = Math.floor(this._stretch * FOLDS)
+    if (MousePointer.instance.isDown && this._fold >= 0 && fold !== this._fold) hapticWhileDragging(6)
+    this._fold = fold
 
     const offset = Util.map(Math.sqrt(mx * mx + my * my), 0, 1, 0.3, 0.5)
     const center = new Vector2(mx * sw * -0.1 * offset, my * sw * -0.01 * offset)
