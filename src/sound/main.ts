@@ -52,6 +52,10 @@ let analyser: AnalyserNode | null = null
 let wave = new Float32Array(2048)
 let spectrum = new Uint8Array(1024)
 const level = new Float32Array(LOOK.lines) // smoothed loudness of each line's band, 0..1
+// the automatic gain: each band and the whole are measured against their own recent peak, which
+// sinks slowly, so a voice in a quiet room moves the lines as much as music in a loud one
+const bandPeak = new Float32Array(LOOK.lines).fill(0.1)
+let loudPeak = 0.02
 
 const button = document.getElementById('mic') as HTMLButtonElement
 // a framed page has no microphone unless the host allows it; plucking still works there
@@ -150,11 +154,16 @@ function frame(now: number) {
     analyser.getFloatTimeDomainData(wave)
     analyser.getByteFrequencyData(spectrum)
     const rate = analyser.context.sampleRate
+    let ss = 0
+    for (let i = 0; i < wave.length; i++) ss += wave[i] * wave[i]
+    loudPeak = Math.max(Math.sqrt(ss / wave.length), loudPeak * Math.exp(-dt / 6), 0.012)
     for (let l = 0; l < LOOK.lines; l++) {
       const [a, b] = bandOf(l, rate)
       let sum = 0
       for (let i = a; i <= b; i++) sum += spectrum[i]
-      const v = Math.min(1, Math.max(0, (sum / (b - a + 1) / 255 - 0.25) / 0.6))
+      const raw = sum / (b - a + 1) / 255
+      bandPeak[l] = Math.max(raw, bandPeak[l] * Math.exp(-dt / 5), 0.12)
+      const v = Math.min(1, Math.pow(Math.max(0, raw - 0.04) / bandPeak[l], 1.4))
       level[l] += (v - level[l]) * (v > level[l] ? 0.5 : 0.08) // quick to swell, slow to settle
     }
   }
@@ -188,7 +197,7 @@ function frame(now: number) {
         if (amp) {
           // ~250 samples across the mark, each averaged with its neighbours: a smooth trace
           const i = offset + Math.floor(u * N * 0.12)
-          d = ((wave[(i - 2 + N) % N] + wave[(i - 1 + N) % N] + wave[i % N] + wave[(i + 1) % N] + wave[(i + 2) % N]) / 5) * amp * swing * 3.2
+          d = ((wave[(i - 2 + N) % N] + wave[(i - 1 + N) % N] + wave[i % N] + wave[(i + 1) % N] + wave[(i + 2) % N]) / 5 / loudPeak) * amp * swing * 0.3
         }
         // a pluck: a string struck at pluckAt, ringing (the shape of a plucked string, triangular, decaying)
         if (pk > 0.002) {
