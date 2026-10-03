@@ -1,21 +1,32 @@
-import"./modulepreload-polyfill.b7f2da20.js";import"./embed.d17cc095.js";import{q as S,v as F,z as P,ao as C,X as G,ap as I,aq as X,an as N,U as R,w as D,ar as H,K as O,as as Y}from"./vendor.008209b9.js";import{l as _}from"./logo-bars.36bf556b.js";import{b as w}from"./logo-path.248ebb5a.js";const k=["sin","plasma","fbm","warp","cells","ridge","tan"],B=new URLSearchParams(location.search).get("f");let u=Math.max(0,k.indexOf(B??"sin"));const U=document.getElementById("fn");function M(){U.replaceChildren(...k.map((e,a)=>{const o=document.createElement("button");return o.type="button",o.textContent=e,o.setAttribute("aria-pressed",String(a===u)),o.addEventListener("click",()=>{u=a;const s=new URLSearchParams(location.search);s.set("f",e),history.replaceState(null,"",`${location.pathname}?${s}`),M()}),o}))}M();const t={markXs:.5,markLg:.22,depth:2.6,rest:{x:-20,y:-32},reach:24,dragGain:.12,face:.56,side:[.36,.62],far:.06},l=document.getElementById("extrude"),p=new S({canvas:l,antialias:!0});p.setPixelRatio(Math.min(window.devicePixelRatio,2));p.setClearColor(0,1);const L=new F,r=new P(38,1,1,1e5),d=516*t.depth,j=_().flatMap(e=>{const a=Math.hypot(e.bx-e.ax,e.by-e.ay),o=m=>(m.rotateZ(-Math.atan2(e.by-e.ay,e.bx-e.ax)),m.translate((e.ax+e.bx)/2-300,300-(e.ay+e.by)/2,0),m),s=new C(a,w,d-1);s.translate(0,0,-(d-1)/2-1);const h=new G(a,w);return[o(s.toNonIndexed()),o(h.toNonIndexed())]}),A=I(j),g=new X({uniforms:{face:{value:t.face},sideLo:{value:t.side[0]},sideHi:{value:t.side[1]},far:{value:t.far},depth:{value:d},time:{value:0},fn:{value:0}},side:N,vertexShader:`
+import"./modulepreload-polyfill.b7f2da20.js";import"./embed.d17cc095.js";import{q as P,v as X,z as C,ao as G,X as I,ap as D,aq as N,an as R,U as Y,w as A,ar as H,K as O,as as _}from"./vendor.008209b9.js";import{l as B}from"./logo-bars.36bf556b.js";import{b}from"./logo-path.248ebb5a.js";const M=["sin","plasma","fbm","warp","cells","ridge","tan"],U=new URLSearchParams(location.search).get("f");let y=Math.max(0,M.indexOf(U??"sin"));const j=document.getElementById("fn");function L(){j.replaceChildren(...M.map((e,a)=>{const o=document.createElement("button");return o.type="button",o.textContent=e,o.setAttribute("aria-pressed",String(a===y)),o.addEventListener("click",()=>{y=a;const l=new URLSearchParams(location.search);l.set("f",e),history.replaceState(null,"",`${location.pathname}?${l}`),L()}),o}))}L();const t={markXs:.5,markLg:.22,depth:2.6,rest:{x:-20,y:-32},reach:24,dragGain:.12,face:.56,side:[.36,.62],far:.06},s=document.getElementById("extrude"),m=new P({canvas:s,antialias:!0});m.setPixelRatio(Math.min(window.devicePixelRatio,2));m.setClearColor(0,1);const S=new X,r=new C(38,1,1,1e5),f=516*t.depth,W=B().flatMap(e=>{const a=Math.hypot(e.bx-e.ax,e.by-e.ay),o=g=>(g.rotateZ(-Math.atan2(e.by-e.ay,e.bx-e.ax)),g.translate((e.ax+e.bx)/2-300,300-(e.ay+e.by)/2,0),g),l=new G(a,b,f-1,1,1,64);l.translate(0,0,-(f-1)/2-1);const u=new I(a,b);return[o(l.toNonIndexed()),o(u.toNonIndexed())]}),K=D(W),h=new N({uniforms:{face:{value:t.face},sideLo:{value:t.side[0]},sideHi:{value:t.side[1]},far:{value:t.far},depth:{value:f},time:{value:0},fn:{value:0},pulse:{value:99}},side:R,vertexShader:`
     varying vec3 vN;
     varying float vFace;
     varying float vDepth;
     varying vec2 vXY;
-    uniform float depth;
+    varying float vSwell;
+    uniform float depth, pulse;
+    // where the swell is along the body (0 = face, 1 = the end) and how strong, after a tap
+    float swellAt(float d) {
+      float at = pulse * 0.9 - 0.08;
+      float k = exp(-pow((d - at) / 0.07, 2.0));
+      return k * exp(-pulse * 0.9) * step(pulse, 3.0);
+    }
     void main() {
       vXY = position.xy / 516.0; // the mark's width = 1
       vN = normalize(mat3(modelMatrix) * normal);
       vFace = step(0.99, normal.z);
       vDepth = clamp(-position.z / depth, 0.0, 1.0);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      vSwell = swellAt(vDepth);
+      vec3 p = position;
+      p.xy *= 1.0 + 0.16 * vSwell; // the section swells about the mark's centre
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,fragmentShader:`
     varying vec3 vN;
     varying float vFace;
     varying float vDepth;
     varying vec2 vXY;
-    uniform float face, sideLo, sideHi, far, time, fn;
+    varying float vSwell;
+    uniform float face, sideLo, sideHi, far, time, fn, pulse;
 
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec2 hash2(vec2 p) {
@@ -87,6 +98,9 @@ import"./modulepreload-polyfill.b7f2da20.js";import"./embed.d17cc095.js";import{
       // below the picture); the cut edge gets a per-pixel jitter re-rolled twelve times a second, so
       // it flickers like the story did. Near zero the cut reaches into the face.
       float reach = 0.02 + 0.8 * reachAt(vXY, time);
+      // behind the running swell the material is pushed out whole, then the cut eats back into it
+      float pushed = clamp(pulse * 0.9, 0.0, 1.0) * (1.0 - smoothstep(1.2, 2.6, pulse));
+      reach = max(reach, pushed);
       float shiver = (hash(floor(gl_FragCoord.xy / 2.0) + floor(time * 12.0)) - 0.5) * 0.05;
       if (vDepth > reach + shiver) discard;
 
@@ -100,5 +114,6 @@ import"./modulepreload-polyfill.b7f2da20.js";import"./embed.d17cc095.js";import{
       g = mix(g, face, vFace);
       // the body sinks into the dark towards its far end
       g = mix(g, far, pow(vDepth / 0.8, 0.9) * 0.85);
+      g = min(1.0, g + vSwell * 0.45); // the swell catches the light
       gl_FragColor = vec4(vec3(g) * vec3(0.98, 0.97, 1.0), 1.0);
-    }`}),y=new R(A,g);y.position.z=d*.3;const v=new D;v.add(y);L.add(v);const f=H.degToRad;let i={x:0,y:0},c={x:0,y:0},n=null;const b=e=>Math.max(-t.reach,Math.min(t.reach,e));l.addEventListener("pointerdown",e=>{n={id:e.pointerId,x:e.clientX,y:e.clientY,ox:i.x,oy:i.y},l.setPointerCapture(e.pointerId)});l.addEventListener("pointermove",e=>{!n||e.pointerId!==n.id||(i.y=b(n.oy+(e.clientX-n.x)*t.dragGain),i.x=b(n.ox+(e.clientY-n.y)*t.dragGain))});const q=e=>{n&&e.pointerId===n.id&&(n=null)};l.addEventListener("pointerup",q);l.addEventListener("pointercancel",q);function z(){const e=window.innerWidth,a=window.innerHeight;p.setSize(e,a,!1),r.aspect=e/a;const o=e*(e<=768?t.markXs:t.markLg),h=516/o*e/r.aspect;r.position.set(0,0,h/2/Math.tan(f(r.fov/2))),r.near=1,r.far=r.position.z+d*3,r.updateProjectionMatrix()}window.addEventListener("resize",z);z();const x=new O(0,0,-d*.22).add(y.position);x.applyEuler(new Y(f(t.rest.x),f(t.rest.y),0));const W=performance.now();function E(){const e=(performance.now()-W)/1e3;n||(i.x*=.96,i.y*=.96),c.x+=(i.x-c.x)*.12,c.y+=(i.y-c.y)*.12;const a={x:Math.sin(e*.35)*2,y:Math.sin(e*.27+1)*3};v.rotation.set(f(t.rest.x+c.x+a.x),f(t.rest.y+c.y+a.y),0),v.position.set(-x.x,-x.y,0),g.uniforms.time.value=e,g.uniforms.fn.value=u,p.render(L,r),requestAnimationFrame(E)}E();
+    }`}),x=new Y(K,h);x.position.z=f*.3;const v=new A;v.add(x);S.add(v);const p=H.degToRad;let i={x:0,y:0},c={x:0,y:0},n=null;const k=e=>Math.max(-t.reach,Math.min(t.reach,e));s.addEventListener("pointerdown",e=>{n={id:e.pointerId,x:e.clientX,y:e.clientY,ox:i.x,oy:i.y},s.setPointerCapture(e.pointerId)});s.addEventListener("pointermove",e=>{!n||e.pointerId!==n.id||(i.y=k(n.oy+(e.clientX-n.x)*t.dragGain),i.x=k(n.ox+(e.clientY-n.y)*t.dragGain))});let q=-99,d=null;s.addEventListener("pointerdown",e=>d={x:e.clientX,y:e.clientY,t:performance.now()});const E=e=>{n&&e.pointerId===n.id&&(n=null),d&&e.type==="pointerup"&&Math.hypot(e.clientX-d.x,e.clientY-d.y)<12&&performance.now()-d.t<350&&(q=performance.now()),d=null};s.addEventListener("pointerup",E);s.addEventListener("pointercancel",E);function z(){const e=window.innerWidth,a=window.innerHeight;m.setSize(e,a,!1),r.aspect=e/a;const o=e*(e<=768?t.markXs:t.markLg),u=516/o*e/r.aspect;r.position.set(0,0,u/2/Math.tan(p(r.fov/2))),r.near=1,r.far=r.position.z+f*3,r.updateProjectionMatrix()}window.addEventListener("resize",z);z();const w=new O(0,0,-f*.22).add(x.position);w.applyEuler(new _(p(t.rest.x),p(t.rest.y),0));const T=performance.now();function F(){const e=(performance.now()-T)/1e3;n||(i.x*=.96,i.y*=.96),c.x+=(i.x-c.x)*.12,c.y+=(i.y-c.y)*.12;const a={x:Math.sin(e*.35)*2,y:Math.sin(e*.27+1)*3};v.rotation.set(p(t.rest.x+c.x+a.x),p(t.rest.y+c.y+a.y),0),v.position.set(-w.x,-w.y,0),h.uniforms.time.value=e,h.uniforms.fn.value=y,h.uniforms.pulse.value=(performance.now()-q)/1e3,m.render(S,r),requestAnimationFrame(F)}F();

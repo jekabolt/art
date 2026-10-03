@@ -3,6 +3,8 @@
 // cut by a moving field, |sin| of a diagonal wave against a threshold that drifts with time (the
 // same function the old emboss shader cut its layers with), and the cut edge shivers a little every
 // frame. A finger (or the mouse) turns it a little; let go and it eases back to its pose.
+// A tap presses material through the die: a swell of the cross-section, lit, runs from the face to
+// the end, and the tail shoots out to its full length behind it before the cut eats it back.
 //
 // The solid is the logo's bars (core/logo-bars: rectangles that add up to the mark) each extruded
 // into a box. Shading is flat and hand-made: a grey by face direction, darkened along the depth.
@@ -74,7 +76,7 @@ const parts = logoBars().flatMap((s) => {
     g.translate((s.ax + s.bx) / 2 - 300, 300 - (s.ay + s.by) / 2, 0)
     return g
   }
-  const body = new THREE.BoxGeometry(len, LOGO_STROKE, D - 1)
+  const body = new THREE.BoxGeometry(len, LOGO_STROKE, D - 1, 1, 1, 64) // depth segments: the swell bends the walls
   body.translate(0, 0, -(D - 1) / 2 - 1)
   const plate = new THREE.PlaneGeometry(len, LOGO_STROKE)
   return [place(body.toNonIndexed()), place(plate.toNonIndexed())]
@@ -90,6 +92,7 @@ const mat = new THREE.ShaderMaterial({
     depth: { value: D },
     time: { value: 0 },
     fn: { value: 0 },
+    pulse: { value: 99 }, // seconds since the last tap
   },
   side: THREE.DoubleSide,
   vertexShader: /* glsl */ `
@@ -97,20 +100,31 @@ const mat = new THREE.ShaderMaterial({
     varying float vFace;
     varying float vDepth;
     varying vec2 vXY;
-    uniform float depth;
+    varying float vSwell;
+    uniform float depth, pulse;
+    // where the swell is along the body (0 = face, 1 = the end) and how strong, after a tap
+    float swellAt(float d) {
+      float at = pulse * 0.9 - 0.08;
+      float k = exp(-pow((d - at) / 0.07, 2.0));
+      return k * exp(-pulse * 0.9) * step(pulse, 3.0);
+    }
     void main() {
       vXY = position.xy / 516.0; // the mark's width = 1
       vN = normalize(mat3(modelMatrix) * normal);
       vFace = step(0.99, normal.z);
       vDepth = clamp(-position.z / depth, 0.0, 1.0);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      vSwell = swellAt(vDepth);
+      vec3 p = position;
+      p.xy *= 1.0 + 0.16 * vSwell; // the section swells about the mark's centre
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: /* glsl */ `
     varying vec3 vN;
     varying float vFace;
     varying float vDepth;
     varying vec2 vXY;
-    uniform float face, sideLo, sideHi, far, time, fn;
+    varying float vSwell;
+    uniform float face, sideLo, sideHi, far, time, fn, pulse;
 
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec2 hash2(vec2 p) {
@@ -182,6 +196,9 @@ const mat = new THREE.ShaderMaterial({
       // below the picture); the cut edge gets a per-pixel jitter re-rolled twelve times a second, so
       // it flickers like the story did. Near zero the cut reaches into the face.
       float reach = 0.02 + 0.8 * reachAt(vXY, time);
+      // behind the running swell the material is pushed out whole, then the cut eats back into it
+      float pushed = clamp(pulse * 0.9, 0.0, 1.0) * (1.0 - smoothstep(1.2, 2.6, pulse));
+      reach = max(reach, pushed);
       float shiver = (hash(floor(gl_FragCoord.xy / 2.0) + floor(time * 12.0)) - 0.5) * 0.05;
       if (vDepth > reach + shiver) discard;
 
@@ -195,6 +212,7 @@ const mat = new THREE.ShaderMaterial({
       g = mix(g, face, vFace);
       // the body sinks into the dark towards its far end
       g = mix(g, far, pow(vDepth / 0.8, 0.9) * 0.85);
+      g = min(1.0, g + vSwell * 0.45); // the swell catches the light
       gl_FragColor = vec4(vec3(g) * vec3(0.98, 0.97, 1.0), 1.0);
     }`,
 })
@@ -221,8 +239,16 @@ canvas.addEventListener('pointermove', (e) => {
   target.y = clampReach(drag.oy + (e.clientX - drag.x) * LOOK.dragGain)
   target.x = clampReach(drag.ox + (e.clientY - drag.y) * LOOK.dragGain)
 })
+// A tap (pressed and let go within 12 px and 350 ms) sends a pulse down the body.
+let tapAt = -99
+let press: { x: number; y: number; t: number } | null = null
+canvas.addEventListener('pointerdown', (e) => (press = { x: e.clientX, y: e.clientY, t: performance.now() }))
 const release = (e: PointerEvent) => {
   if (drag && e.pointerId === drag.id) drag = null
+  if (press && e.type === 'pointerup' && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 12 && performance.now() - press.t < 350) {
+    tapAt = performance.now()
+  }
+  press = null
 }
 canvas.addEventListener('pointerup', release)
 canvas.addEventListener('pointercancel', release)
@@ -264,6 +290,7 @@ function frame() {
   pivot.position.set(-centre.x, -centre.y, 0)
   mat.uniforms.time.value = t
   mat.uniforms.fn.value = fnIndex
+  mat.uniforms.pulse.value = (performance.now() - tapAt) / 1000
   renderer.render(scene, camera)
   requestAnimationFrame(frame)
 }
