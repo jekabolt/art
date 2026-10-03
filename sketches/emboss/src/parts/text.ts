@@ -12,7 +12,7 @@ import { Func } from '../core/func';
 import { MousePointer } from '../core/mousePointer';
 import { Util } from '../libs/util';
 import { Vector3 } from 'three/src/math/Vector3';
-import { TAP_MODE, tapAge } from '../core/tap';
+import { tapAge } from '../core/tap';
 
 /** wave: how long one layer swells, and the lag from one layer to the next (front → back). */
 const WAVE_DUR = 0.7;
@@ -134,7 +134,7 @@ export class Text extends MyObject3D {
     const uni = this._getUni(this._mesh);
     const markW = s / this._scale / (xs ? FIT_XS : FIT_LG);
 
-    if (TAP_MODE === 'wave') {
+    {
       // Each layer swells once, the front first and the back last, and is pushed away from the
       // finger by up to a fifth of the mark: the relief bulges out from where it was touched.
       const lt = tapAge() - this._noise.x * WAVE_LAG;
@@ -148,7 +148,8 @@ export class Text extends MyObject3D {
         this.position.x += (dx / len) * markW * 0.18 * env * depth;
         this.position.y += (dy / len) * markW * 0.18 * env * depth;
       }
-    } else if (TAP_MODE === 'glint') {
+    }
+    {
       // A ring of light runs out from the finger; deeper layers catch it a little later, so it
       // rolls over the bevels of the relief rather than sliding over a flat picture.
       const lt = tapAge() - this._noise.x * 0.002;
