@@ -1,4 +1,4 @@
-// CLOTH: a sheet of shiny holographic film printed with the logo, floating in the dark. It is a
+// CLOTH: a square of shiny holographic film printed with the logo (2.5% border), floating in the dark. It is a
 // real cloth: a grid of particles held by stretch, shear and bend springs (Verlet, a dozen passes of
 // constraints a frame). Grab it with a finger and it follows and crumples; drag in the space round
 // it and the whole sheet turns; a tap pokes it and a wave runs through. Left alone it slowly
@@ -14,9 +14,10 @@ import './cloth.css'
 
 const LOOK = {
   nx: 36, // particles across
-  ny: 47, // … and down (the sheet is 1 × 1.3)
+  ny: 36, // … and down (a square sheet)
   w: 1,
-  h: 1.3,
+  h: 1,
+  margin: 0.025, // the print's border round the logo, sheet widths
   passes: 12,
   damping: 0.985,
   memory: 0.0025, // pull back towards the sheet's resting drape, per frame
@@ -46,23 +47,16 @@ function print(): HTMLCanvasElement {
   r.addColorStop(1, 'rgba(255,255,255,0)')
   g.fillStyle = r
   g.fillRect(0, 0, W, H)
-  // the logo
-  const side = W * 0.62
+  // the logo, edge to edge but for the border
+  const m = W * LOOK.margin
   g.save()
-  g.translate((W - side) / 2, H * 0.14)
-  g.scale(side / LOGO_SPAN, side / LOGO_SPAN)
+  g.translate(m, m)
+  g.scale((W - 2 * m) / LOGO_SPAN, (W - 2 * m) / LOGO_SPAN)
   g.translate(-LOGO_MIN, -LOGO_MIN)
   g.lineWidth = LOGO_STROKE
   g.strokeStyle = '#0a0a0a'
   g.stroke(new Path2D(LOGO_PATH))
   g.restore()
-  // a line of type at the foot
-  g.fillStyle = '#0a0a0a'
-  g.font = `${W * 0.034}px ui-monospace, Menlo, monospace`
-  g.textBaseline = 'alphabetic'
-  g.fillText('GRBPWR', W * 0.19, H * 0.88)
-  g.textAlign = 'right'
-  g.fillText('ART.GRBPWR.COM', W * 0.81, H * 0.88)
   return c
 }
 
