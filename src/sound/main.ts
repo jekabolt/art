@@ -57,19 +57,33 @@ const button = document.getElementById('mic') as HTMLButtonElement
 // a framed page has no microphone unless the host allows it; plucking still works there
 if (EMBEDDED || !navigator.mediaDevices?.getUserMedia) button.hidden = true
 button.addEventListener('click', async () => {
+  // iPhone Safari: the audio context must be made and resumed inside the tap itself (after an await
+  // the tap no longer counts and it stays suspended, the analyser reading silence), and a node that
+  // does not lead to the speakers is never run — so the analyser feeds a muted gain to the output.
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+  const ctx = new Ctx()
+  const resumed = ctx.resume()
+  button.textContent = 'listening…'
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })
-    const ctx = new AudioContext()
-    await ctx.resume()
-    analyser = ctx.createAnalyser()
-    analyser.fftSize = 2048
-    analyser.smoothingTimeConstant = 0.6
-    ctx.createMediaStreamSource(stream).connect(analyser)
-    wave = new Float32Array(analyser.fftSize)
-    spectrum = new Uint8Array(analyser.frequencyBinCount)
+    await resumed
+    if (ctx.state !== 'running') await ctx.resume()
+    const node = ctx.createAnalyser()
+    node.fftSize = 2048
+    node.smoothingTimeConstant = 0.6
+    const mute = ctx.createGain()
+    mute.gain.value = 0
+    ctx.createMediaStreamSource(stream).connect(node)
+    node.connect(mute)
+    mute.connect(ctx.destination)
+    wave = new Float32Array(node.fftSize)
+    spectrum = new Uint8Array(node.frequencyBinCount)
+    analyser = node
     button.hidden = true
-  } catch {
-    button.textContent = 'no microphone'
+  } catch (err) {
+    const name = (err as { name?: string })?.name
+    button.textContent = name === 'NotAllowedError' ? 'microphone not allowed' : 'no microphone'
+    ctx.close().catch(() => {})
   }
 })
 
