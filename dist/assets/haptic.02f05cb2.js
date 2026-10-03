@@ -1,0 +1,1 @@
+function a(n=12){try{if(typeof navigator.vibrate=="function"){navigator.vibrate(n);return}const e=document.createElement("label");e.ariaHidden="true",e.style.display="none";const t=document.createElement("input");t.type="checkbox",t.setAttribute("switch",""),e.appendChild(t),document.head.appendChild(e),e.click(),e.remove()}catch{}}export{a as h};
