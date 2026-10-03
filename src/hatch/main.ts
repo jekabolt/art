@@ -1,10 +1,9 @@
 // HATCH: a cube drawn the way a pen plotter draws it — every face a stack of parallel ink lines on
-// textured paper. On the front face the logo is where the lines come apart: inside its strokes each
-// line is broken into short dashes that have slipped, turned and drifted, dense at the stroke's edge
-// and scattered in its middle, stirring a little all the time.
+// textured paper. On the front face the hatching stops at the logo's strokes, so the mark is cut
+// clean out of the lines.
 // A finger tears the hatching wherever it passes — solid lines too — and blows the dashes away from
 // it; they drift back and join up into lines again, slowly. A tap is a gust: the whole drawing
-// scatters and reassembles, the logo last of all because its dashes never quite settle.
+// scatters and reassembles round the cut-out mark.
 import '../core/embed'
 import { EMBEDDED } from '../core/embed'
 import { haptic } from '../core/haptic'
@@ -83,12 +82,7 @@ function face(o: number[], a: number[], b: number[], n: [number, number, number]
       let a0 = 0
       if (logo) {
         const m = maskAt(s, t)
-        if (m >= 0 && inside[m]) {
-          const d = depth[m]
-          if (Math.random() < d * 0.4) continue // the middle of a stroke is sparse
-          loose = 1
-          a0 = 0.012 + 0.06 * d * d
-        }
+        if (m >= 0 && inside[m]) continue // the logo is cut clean out of the hatching
       }
       cx.push(o[0] + a[0] * s + b[0] * t)
       cy.push(o[1] + a[1] * s + b[1] * t)
@@ -303,18 +297,18 @@ function frame(now: number) {
       }
       // loose: slipped, turned and stirring; torn hatching strays further than the logo's
       const r = rnd[i]
-      const a = (ang0[i] + Math.sin(t * (0.4 + r) + r * 40) * 0.25) * L + spin[i]
+      const a = base[i] * (Math.PI / 2) * (1 - tear[i]) + (ang0[i] + Math.sin(t * (0.4 + r) + r * 40) * 0.25) * tear[i] + spin[i] // the logo's ticks stand upright
       const ca = Math.cos(a)
       const sa = Math.sin(a)
       const nx = ux * ca - uy * sa
       const ny = ux * sa + uy * ca
       ux = nx
       uy = ny
-      const stray = (amp[i] * base[i] + 0.05 * tear[i]) * scale
+      const stray = 0.05 * tear[i] * scale
       const sway = t * (0.15 + r * 0.3) + r * 90
       const X2 = X + Math.cos(sway) * stray + px[i]
       const Y2 = Y + Math.sin(sway * 1.3) * stray + py[i]
-      const h = half * (0.7 + 0.5 * r)
+      const h = half * (base[i] ? 0.5 : 0.62 + 0.12 * r) * (1 + 0.6 * tear[i])
       loose.moveTo(X2 - ux * h, Y2 - uy * h)
       loose.lineTo(X2 + ux * h, Y2 + uy * h)
     }
@@ -324,7 +318,7 @@ function frame(now: number) {
   g.lineWidth = 1
   g.globalAlpha = 0.9
   g.stroke(solid)
-  g.lineWidth = 1.6 // the loose dashes read heavier, as the pen sits on them twice
+  g.lineWidth = 1.15
   g.lineCap = 'round'
   g.stroke(loose)
   g.globalAlpha = 1

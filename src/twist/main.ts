@@ -1,6 +1,6 @@
-// TWIST: rows of the logo set solid on paper, like a page of repeated type, cut into concentric
-// rings that are each turned round the same centre — the inner ones furthest — so the rows break at
-// every ring's edge and wind into a vortex, the way a 1970s cover cut a repeated word into rings.
+// TWIST: the logo set large on paper and cut into concentric rings that are each turned round the
+// same centre — the inner ones furthest — so its strokes break at every ring's edge and wind into a
+// vortex, the way a 1970s cover cut a repeated word into rings.
 // Drag sideways to wind the twist up or back; the rings follow one after another, the inner ones
 // first. A tap moves the centre of the vortex to where you touched.
 import '../core/embed'
@@ -10,13 +10,12 @@ import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './twist.css'
 
 const LOOK = {
-  rows: 7, // logos down the shorter side
-  gap: 0.1, // between logos, a share of a logo
-  rings: 9,
-  reach: 0.48, // the outer ring's radius, a share of the shorter side
+  mark: 0.82, // the logo's width, a share of the shorter side
+  rings: 11,
+  reach: 0.6, // the outer ring's radius, a share of the shorter side
   ink: '#0d0d0d',
   paper: '#ecebe7',
-  rest: 0.55, // the twist at rest, radians at the centre
+  rest: 0.3, // the twist at rest, radians at the centre
 }
 
 const canvas = document.getElementById('twist') as HTMLCanvasElement
@@ -39,25 +38,15 @@ function resize() {
   x.setTransform(dpr, 0, 0, dpr, 0, 0)
   x.fillStyle = LOOK.paper
   x.fillRect(0, 0, F, F)
-  const s = Math.min(W, H) / (LOOK.rows + (LOOK.rows - 1) * LOOK.gap) // a logo
-  const pitch = s * (1 + LOOK.gap)
-  // the grid is laid from the screen's top left corner, so the page sits square on the screen at rest
-  const x0 = (F - W) / 2
-  const y0 = (F - H) / 2 + (H - (Math.round(H / pitch) * pitch - s * LOOK.gap)) / 2
-  const path = new Path2D(LOGO_PATH)
-  x.fillStyle = x.strokeStyle = LOOK.ink
-  for (let gy = y0 - Math.ceil(y0 / pitch) * pitch; gy < F; gy += pitch) {
-    for (let gx = x0 + (W - (Math.floor(W / pitch) * pitch - s * LOOK.gap)) / 2 - Math.ceil(x0 / pitch) * pitch; gx < F; gx += pitch) {
-      x.save()
-      x.translate(gx, gy)
-      x.scale(s / LOGO_SPAN, s / LOGO_SPAN)
-      x.translate(-LOGO_MIN, -LOGO_MIN)
-      x.lineWidth = LOGO_STROKE
-      x.stroke(path)
-      x.restore()
-    }
-  }
-  if (!centre) centre = { x: W * 0.52, y: H * 0.5 }
+  // one logo, square in the middle of the screen at rest
+  const s = Math.min(W, H) * LOOK.mark
+  x.strokeStyle = LOOK.ink
+  x.translate(F / 2 - s / 2, F / 2 - s / 2)
+  x.scale(s / LOGO_SPAN, s / LOGO_SPAN)
+  x.translate(-LOGO_MIN, -LOGO_MIN)
+  x.lineWidth = LOGO_STROKE
+  x.stroke(new Path2D(LOGO_PATH))
+  if (!centre) centre = { x: W * 0.5, y: H * 0.5 }
 }
 
 let centre: { x: number; y: number } | null = null
