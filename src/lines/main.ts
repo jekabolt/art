@@ -3,7 +3,8 @@
 // ridges in front hiding the lines behind them. It is a real surface: the heights come from the mark
 // blurred at two widths, the lines are painted on the surface in the shader at a constant pixel
 // width, so turning the plate in 3D (drag) keeps the hidden-line look from every side.
-// A tap drops a stone: a ring of ripples runs out over the plate from where it landed.
+// A tap drops a stone: a red ring of ripples runs out over the plate from where it landed, the
+// lines crowd in for the moment, and as the plate settles they go back to their usual number.
 import '../core/embed'
 import { EMBEDDED } from '../core/embed'
 import * as THREE from 'three'
@@ -12,11 +13,13 @@ import './lines.css'
 
 const LOOK = {
   ink: new THREE.Color('#311eee'),
+  wave: new THREE.Color('#ff0000'), // the ripple's ring
   plate: new THREE.Color('#ffffff'),
   lines: 120, // across the plate
+  tapLines: 90, // a tap adds this many for a moment; they go as the plate settles
   angle: 0.2, // radians the lines rise from horizontal
   lift: 0.1, // relief height, plate widths
-  plateXs: 0.86, // plate width / screen width on a phone
+  plateXs: 0.72, // plate width / screen width on a phone
   plateLg: 0.42,
   rest: { x: -0.5, y: 0.0 }, // radians: the plate tipped back so the relief lifts the lines
   turn: { x: [-1.2, -0.1], y: [-0.7, 0.7] },
@@ -67,6 +70,7 @@ const uniforms = {
   height: { value: heightTex },
   lift: { value: LOOK.lift },
   ink: { value: LOOK.ink },
+  wave: { value: LOOK.wave },
   plate: { value: LOOK.plate },
   count: { value: LOOK.lines },
   dir: { value: new THREE.Vector2(-Math.sin(LOOK.angle), Math.cos(LOOK.angle)) },
@@ -84,30 +88,39 @@ const material = new THREE.ShaderMaterial({
     uniform float lift, rippleT;
     uniform vec2 rippleAt;
     varying vec2 vP;
-    float ripple(vec2 p) {
+    varying float vRed;
+    float env(vec2 p) {
       if (rippleT > 4.0) return 0.0;
       float r = distance(p, rippleAt);
-      float front = rippleT * 0.55;
-      float env = exp(-pow((r - front) / 0.2, 2.0)) * exp(-rippleT * 0.7);
-      return sin((r - front) * 30.0) * env * 0.06;
+      return exp(-pow((r - rippleT * 0.55) / 0.2, 2.0)) * exp(-rippleT * 0.7);
     }
     void main() {
       vP = position.xy; // plate units, -0.5..0.5
-      float h = texture2D(height, uv).r * lift + ripple(vP);
+      float e = env(vP);
+      float r = distance(vP, rippleAt) - rippleT * 0.55;
+      vRed = e;
+      float h = texture2D(height, uv).r * lift + sin(r * 30.0) * e * 0.06;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy, h, 1.0);
     }`,
   fragmentShader: /* glsl */ `
-    uniform vec3 ink, plate;
+    uniform vec3 ink, plate, wave;
     uniform float count, dpr;
     uniform vec2 dir;
     varying vec2 vP;
+    varying float vRed;
     void main() {
-      // distance to the nearest line, measured in screen pixels, so every line is ~0.8 px wide
-      // whatever the slope or the turn; steep flanks crowd the lines together, as in an engraving
+      // Lines a constant ~0.8 px wide whatever the slope or the turn (measured through fwidth), but
+      // never more than a quarter of the gap: where they crowd — steep flanks, more lines after a
+      // tap — they thin out instead of closing up, so the plate keeps its white.
       float s = dot(vP, dir) * count;
-      float d = abs(fract(s + 0.5) - 0.5) / max(fwidth(s), 1e-4);
-      float a = 1.0 - smoothstep(0.25 * dpr, 0.8 * dpr, d);
-      gl_FragColor = vec4(mix(plate, ink, a), 1.0);
+      float fw = max(fwidth(s), 1e-4);
+      float d = abs(fract(s + 0.5) - 0.5);
+      float hw = min(0.4 * dpr * fw, 0.25);
+      float a = 1.0 - smoothstep(hw - 0.6 * fw, hw + 0.6 * fw, d);
+      a *= clamp(hw / fw * 1.5, 0.35, 1.0); // sub-pixel lines fade rather than flicker
+      // the ripple's ring turns the lines red as it passes
+      vec3 col = mix(ink, wave, smoothstep(0.25, 0.7, vRed));
+      gl_FragColor = vec4(mix(plate, col, a), 1.0);
     }`,
 })
 const plateMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 400, 400), material)
@@ -174,6 +187,13 @@ function frame(now: number) {
   // a slow sway so the relief keeps catching the eye
   pivot.rotation.set(pose.x + Math.sin(t * 0.3) * 0.03, pose.y + Math.sin(t * 0.21 + 1) * 0.05, 0)
   uniforms.rippleT.value = (now - rippleStart) / 1000
+  // a tap crowds the lines in quickly, and they ease back to the usual number as the ripple dies
+  const rt = uniforms.rippleT.value
+  const ss = (a: number, b: number, x: number) => {
+    const k = Math.min(1, Math.max(0, (x - a) / (b - a)))
+    return k * k * (3 - 2 * k)
+  }
+  uniforms.count.value = LOOK.lines + LOOK.tapLines * ss(0, 0.25, rt) * (1 - ss(0.8, 3.0, rt))
   renderer.render(scene, camera)
   requestAnimationFrame(frame)
 }
