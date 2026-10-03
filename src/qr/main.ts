@@ -25,6 +25,7 @@ const levelEl = $<HTMLInputElement>('level')
 const contrastEl = $<HTMLInputElement>('contrast')
 const brightnessEl = $<HTMLInputElement>('brightness')
 const noteEl = $<HTMLElement>('note')
+const clearEl = $<HTMLButtonElement>('clear')
 const dlEl = $<HTMLButtonElement>('download')
 const dlBoxEl = $<HTMLElement>('download-box')
 const formatEls = [$<HTMLButtonElement>('download-png'), $<HTMLButtonElement>('download-svg')]
@@ -82,8 +83,9 @@ function render(): boolean {
   $('level-out').textContent = lv.label
   $('contrast-out').textContent = contrastEl.value
   $('brightness-out').textContent = brightnessEl.value
+  clearEl.disabled = urlEl.value === ''
   if (!text) {
-    noteEl.textContent = 'type a url'
+    noteEl.textContent = ''
     dlEl.disabled = true
     return false
   }
@@ -136,6 +138,11 @@ function render(): boolean {
 }
 
 for (const el of [urlEl, levelEl, contrastEl, brightnessEl]) el.addEventListener('input', render)
+clearEl.addEventListener('click', () => {
+  urlEl.value = ''
+  render()
+  urlEl.focus()
+})
 
 // Sliders by hand: a touch anywhere on the line sets the value and drags from there (iOS only moves
 // the thumb when the thumb itself is grabbed, and a miss scrolls the page instead).

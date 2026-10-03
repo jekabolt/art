@@ -22,17 +22,35 @@
     gap: 12px;
 }
 
-.qr-row-url {
-    grid-template-columns: 112px 1fr;
+/* the url: the punch card's text strip */
+.site .qr-url {
+    display: block;
+    width: 100%;
+    height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: none;
 }
 
-.site .qr-url {
-    height: 28px;
-    min-width: 0;
-    padding: 0 6px;
-    border: 1px solid var(--line);
-    background: var(--paper);
-    text-transform: none;
+.site .qr-url::placeholder {
+    color: var(--muted);
+    letter-spacing: normal;
+    text-transform: uppercase;
+}
+
+.site .qr-url:focus-visible {
+    outline: none;
+    background-color: #f4f4f4;
+}
+
+.qr-under {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 8px;
 }
 
 .qr-out {
@@ -78,11 +96,9 @@
     background: var(--ink);
 }
 
-.qr-note:empty {
-    display: none;
-}
-
 .qr-note {
+    flex: 1;
+    min-width: 0;
     text-transform: none;
     color: var(--error);
 }

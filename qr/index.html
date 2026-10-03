@@ -33,11 +33,13 @@
     </header>
 
     <main class="qr">
-        <label class="qr-row qr-row-url">
-            <span class="qr-label">url</span>
-            <input id="url" class="qr-url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="https://grbpwr.com" />
-        </label>
-        <p id="note" class="qr-note" aria-live="polite"></p>
+        <div class="qr-field">
+            <input id="url" class="qr-url" type="text" inputmode="url" aria-label="url" placeholder="type a url" autocomplete="off" autocapitalize="off" spellcheck="false" value="https://grbpwr.com" />
+            <div class="qr-under">
+                <p id="note" class="qr-note" aria-live="polite"></p>
+                <button id="clear" type="button" class="chip">clear</button>
+            </div>
+        </div>
         <svg id="code" class="qr-code" role="img" aria-label="QR code" xmlns="http://www.w3.org/2000/svg"></svg>
         <div class="qr-controls">
             <label class="qr-row">
