@@ -25,8 +25,30 @@
     <meta name="twitter:image" content="https://art.grbpwr.com/og.png" />
 </head>
 
-<body>
-    <canvas id="window" aria-label="the camera, in black and white: inside the GRBPWR logo it shows now, outside it three seconds ago, so the logo appears only when something moves; tap to swap"></canvas>
+<body class="site slit">
+    <header class="site-bar">
+        <a href="/">grbpwr / art</a>
+        <span>window</span>
+    </header>
+
+    <main class="slit-main">
+        <div class="slit-frame">
+            <canvas id="scan" width="600" height="600" aria-label="the camera, in black and white: inside the GRBPWR logo it shows now, outside it three seconds ago; tap to swap"></canvas>
+            <button id="start" type="button" class="slit-overlay window-start">turn on camera</button>
+            <div id="overlay" class="slit-overlay" hidden>
+                <img alt="window picture — hold to save" />
+                <span>hold to save · tap to go on</span>
+            </div>
+        </div>
+        <div class="slit-bar">
+            <span id="status" class="slit-status" aria-live="polite"></span>
+            <button id="save" type="button" class="slit-save" aria-label="save picture">
+                <img src="/assets/img/logo/white.png" alt="" width="32" height="32" />
+                <span>save</span>
+            </button>
+        </div>
+    </main>
+
     <script type="module" src="/src/window/main.ts"></script>
 </body>
 

@@ -23,19 +23,41 @@
     <meta name="twitter:title" content="GRBPWR — Window" />
     <meta name="twitter:description" content="Generative studies of the GRBPWR mark." />
     <meta name="twitter:image" content="https://art.grbpwr.com/og.png" />
-  <script type="module" crossorigin src="/assets/index.1871f25a.js"></script>
+  <script type="module" crossorigin src="/assets/index.9e2b3b1e.js"></script>
   <link rel="modulepreload" href="/assets/modulepreload-polyfill.b7f2da20.js">
   <link rel="modulepreload" href="/assets/embed.d17cc095.js">
-  <link rel="modulepreload" href="/assets/camera.8736e101.js">
   <link rel="modulepreload" href="/assets/haptic.02f05cb2.js">
   <link rel="modulepreload" href="/assets/logo-path.248ebb5a.js">
-  <link rel="stylesheet" href="/assets/camera.1801c9c3.css">
-  <link rel="stylesheet" href="/assets/index.83e9c861.css">
+  <link rel="stylesheet" href="/assets/index.9bfc0cf9.css">
   <link rel="stylesheet" href="/assets/fonts.1580bea8.css">
+  <link rel="stylesheet" href="/assets/site.6e128e7e.css">
+  <link rel="stylesheet" href="/assets/slit.d33b8a2c.css">
 </head>
 
-<body>
-    <canvas id="window" aria-label="the camera, in black and white: inside the GRBPWR logo it shows now, outside it three seconds ago, so the logo appears only when something moves; tap to swap"></canvas>
+<body class="site slit">
+    <header class="site-bar">
+        <a href="/">grbpwr / art</a>
+        <span>window</span>
+    </header>
+
+    <main class="slit-main">
+        <div class="slit-frame">
+            <canvas id="scan" width="600" height="600" aria-label="the camera, in black and white: inside the GRBPWR logo it shows now, outside it three seconds ago; tap to swap"></canvas>
+            <button id="start" type="button" class="slit-overlay window-start">turn on camera</button>
+            <div id="overlay" class="slit-overlay" hidden>
+                <img alt="window picture — hold to save" />
+                <span>hold to save · tap to go on</span>
+            </div>
+        </div>
+        <div class="slit-bar">
+            <span id="status" class="slit-status" aria-live="polite"></span>
+            <button id="save" type="button" class="slit-save" aria-label="save picture">
+                <img src="/assets/img/logo/white.png" alt="" width="32" height="32" />
+                <span>save</span>
+            </button>
+        </div>
+    </main>
+
     
 </body>
 

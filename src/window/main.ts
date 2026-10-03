@@ -1,50 +1,148 @@
-// WINDOW: the logo as a window in time. The camera, mirrored, black and white at hard contrast;
-// inside the logo's strokes it shows now, everywhere else the same camera three seconds ago. Hold
-// still and the two agree — there is no logo, just you; move and the mark cuts itself out of the
-// difference between you now and you a moment ago. A tap swaps them: the past inside, now outside.
+// WINDOW: the logo as a window in time, in the slit-scan's dress — the webcam, mirrored, black and
+// paper white at double contrast, in a square frame. Inside the logo's strokes the picture is now;
+// everywhere else it is the same camera three seconds ago. Hold still and the two agree, there is no
+// logo, just you; move and the mark cuts itself out of the difference between you now and you a
+// moment ago. A tap on the picture swaps them (the past inside, now outside). The camera starts from
+// a button over the frame, and the picture runs as soon as it is allowed — no second tap; the logo
+// button saves the frame as a PNG.
 import '../core/embed'
-import { EMBEDDED } from '../core/embed'
-import { cameraButton, coverRect } from '../core/camera'
 import { haptic } from '../core/haptic'
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import '../fonts/fonts.css'
-import '../core/camera.css'
+import '../site.css'
+import '../slit/slit.css'
 import './window.css'
 
-const LOOK = {
-  delay: 3, // seconds between inside and outside
-  markXs: 0.86,
-  markLg: 0.5,
-  frameW: 480, // the stored frames' width (they are small: three seconds of them sit in memory)
-}
+const W = 600
+const H = 600
+const CONTRAST = 2
+const DELAY = 3 // seconds between inside and outside
+/** Paper white, as in the slit-scan: black to a barely warm white instead of pure white. */
+const PAPER = [255, 252, 242]
+const MARK = 0.82 // the logo's size, a share of the frame's height
 
-const canvas = document.getElementById('window') as HTMLCanvasElement
-const g = canvas.getContext('2d')!
-let dpr = 1
-let logo = new Path2D()
-let lineW = 1
+const canvas = document.getElementById('scan') as HTMLCanvasElement
+const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+const statusEl = document.getElementById('status') as HTMLElement
+const saveBtn = document.getElementById('save') as HTMLButtonElement
+const overlay = document.getElementById('overlay') as HTMLElement
+const overlayImg = overlay.querySelector('img') as HTMLImageElement
+canvas.width = W
+canvas.height = H
+ctx.fillStyle = '#000'
+ctx.fillRect(0, 0, W, H)
 
-function resize() {
-  dpr = Math.min(devicePixelRatio || 1, 2)
-  canvas.width = Math.round(innerWidth * dpr)
-  canvas.height = Math.round(innerHeight * dpr)
-  const side = Math.min(canvas.width * (innerWidth <= 768 ? LOOK.markXs : LOOK.markLg), canvas.height * 0.8)
+// the logo's strokes as a mask over the frame
+const inside = (() => {
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const g = c.getContext('2d', { willReadFrequently: true })!
+  const side = H * MARK
   const k = side / LOGO_SPAN
-  const m = new DOMMatrix().translate((canvas.width - side) / 2, (canvas.height - side) / 2).scale(k).translate(-LOGO_MIN, -LOGO_MIN)
-  logo = new Path2D()
-  logo.addPath(new Path2D(LOGO_PATH), m)
-  lineW = LOGO_STROKE * k
-}
-addEventListener('resize', resize)
-resize()
+  g.translate((W - side) / 2, (H - side) / 2)
+  g.scale(k, k)
+  g.translate(-LOGO_MIN, -LOGO_MIN)
+  g.lineWidth = LOGO_STROKE
+  g.stroke(new Path2D(LOGO_PATH))
+  const d = g.getImageData(0, 0, W, H).data
+  const m = new Uint8Array(W * H)
+  for (let i = 0; i < W * H; i++) m[i] = d[i * 4 + 3] // 0..255, antialiased edge
+  return m
+})()
 
-// the past: a ring of small grey frames
-let video: HTMLVideoElement | null = null
-const ring: { c: HTMLCanvasElement; t: number }[] = []
+const startBtn = document.getElementById('start') as HTMLButtonElement
+const video = document.createElement('video')
+video.muted = true
+video.playsInline = true
+video.setAttribute('playsinline', '')
+// iPhone Safari gives no frames from a video that is not in the page until something is tapped
+// again: keep it in the page, invisible
+video.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none'
+document.body.appendChild(video)
+let stream: MediaStream | null = null
 const grab = document.createElement('canvas')
-cameraButton((v) => (video = v), EMBEDDED)
+grab.width = W
+grab.height = H
+const grabCtx = grab.getContext('2d', { willReadFrequently: true })!
 
+// the last few seconds, as grey frames (one byte a pixel keeps three seconds small)
+const ring: { grey: Uint8Array; t: number }[] = []
+const out = ctx.createImageData(W, H)
 let swapped = false
+
+async function start() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+    video.srcObject = stream
+    await video.play()
+    startBtn.hidden = true
+    statusEl.textContent = 'move — the logo is the difference'
+  } catch (err) {
+    startBtn.hidden = false
+    startBtn.textContent = 'turn on camera'
+    statusEl.textContent =
+      (err as { name?: string })?.name === 'NotAllowedError'
+        ? 'camera not allowed — allow it in the browser to look through'
+        : 'no camera'
+  }
+}
+function stop() {
+  stream?.getTracks().forEach((t) => t.stop())
+  stream = null
+}
+
+function draw(now: number) {
+  if (video.readyState >= 2 && video.videoWidth) {
+    // square crop of the camera, mirrored
+    const va = video.videoWidth / video.videoHeight
+    let sx = 0
+    let sy = 0
+    let sw = video.videoWidth
+    let sh = video.videoHeight
+    if (va > W / H) {
+      sw = video.videoHeight * (W / H)
+      sx = (video.videoWidth - sw) / 2
+    } else {
+      sh = video.videoWidth / (W / H)
+      sy = (video.videoHeight - sh) / 2
+    }
+    grabCtx.setTransform(-1, 0, 0, 1, W, 0)
+    grabCtx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H)
+    grabCtx.setTransform(1, 0, 0, 1, 0, 0)
+    const d = grabCtx.getImageData(0, 0, W, H).data
+
+    // this frame, grey at double contrast; reuse the oldest frame's buffer once three seconds are kept
+    const slot = ring.length && now - ring[0].t > DELAY * 1000 + 250 ? ring.shift()! : { grey: new Uint8Array(W * H), t: 0 }
+    const g = slot.grey
+    for (let i = 0; i < W * H; i++) {
+      const lum = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]
+      g[i] = Math.max(0, Math.min(255, (lum - 128) * CONTRAST + 128))
+    }
+    slot.t = now
+    ring.push(slot)
+
+    // the frame nearest to three seconds ago
+    const want = now - DELAY * 1000
+    let past = ring[0]
+    for (const f of ring) if (Math.abs(f.t - want) < Math.abs(past.t - want)) past = f
+    const a = swapped ? past.grey : g // inside
+    const b = swapped ? g : past.grey // outside
+    const o = out.data
+    for (let i = 0; i < W * H; i++) {
+      const m = inside[i]
+      const v = (a[i] * m + b[i] * (255 - m)) / 65025 // 0..1
+      o[i * 4] = v * PAPER[0]
+      o[i * 4 + 1] = v * PAPER[1]
+      o[i * 4 + 2] = v * PAPER[2]
+      o[i * 4 + 3] = 255
+    }
+    ctx.putImageData(out, 0, 0)
+  }
+  requestAnimationFrame(draw)
+}
+
+// a tap on the picture swaps now and then
 let press: { x: number; y: number; t: number } | null = null
 canvas.addEventListener('pointerdown', (e) => (press = { x: e.clientX, y: e.clientY, t: performance.now() }))
 canvas.addEventListener('pointerup', (e) => {
@@ -54,57 +152,47 @@ canvas.addEventListener('pointerup', (e) => {
   }
   press = null
 })
-if (!EMBEDDED) addEventListener('touchmove', (e) => e.preventDefault(), { passive: false })
 
-/** A frame of the camera, mirrored, grey and hard, filling w × h. */
-function draw(ctx: CanvasRenderingContext2D, src: CanvasImageSource, sx: number, sy: number, sw: number, sh: number, w: number, h: number) {
-  ctx.save()
-  ctx.filter = 'grayscale(1) contrast(2)'
-  ctx.translate(w, 0)
-  ctx.scale(-1, 1)
-  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, w, h)
-  ctx.restore()
-}
-
-function frame(now: number) {
-  const W = canvas.width
-  const H = canvas.height
-  g.fillStyle = '#000'
-  g.fillRect(0, 0, W, H)
-  if (video && video.readyState >= 2) {
-    // keep the last few seconds, small
-    const fw = LOOK.frameW
-    const fh = Math.round(fw * (H / W))
-    let slot = ring.length && now - ring[0].t > LOOK.delay * 1000 + 200 ? ring.shift()! : null
-    if (!slot) slot = { c: document.createElement('canvas'), t: 0 }
-    slot.c.width = fw
-    slot.c.height = fh
-    const [sx, sy, sw, sh] = coverRect(video, fw, fh)
-    draw(slot.c.getContext('2d')!, video, sx, sy, sw, sh, fw, fh)
-    slot.t = now
-    ring.push(slot)
-    // the frame closest to `delay` ago
-    const want = now - LOOK.delay * 1000
-    const past = ring.reduce((a, b) => (Math.abs(b.t - want) < Math.abs(a.t - want) ? b : a)).c
-    const [lx, ly, lw, lh] = coverRect(video, W, H)
-    const live = () => draw(g, video!, lx, ly, lw, lh, W, H)
-    const old = () => g.drawImage(past, 0, 0, W, H)
-    ;(swapped ? live : old)()
-    g.save()
-    g.lineWidth = lineW
-    g.lineJoin = 'miter'
-    // clip to the strokes: a stroked path has no clip, so draw the inside layer through a mask
-    grab.width = W
-    grab.height = H
-    const m = grab.getContext('2d')!
-    m.lineWidth = lineW
-    m.stroke(logo)
-    m.globalCompositeOperation = 'source-in'
-    if (swapped) m.drawImage(past, 0, 0, W, H)
-    else draw(m, video, lx, ly, lw, lh, W, H)
-    g.drawImage(grab, 0, 0)
-    g.restore()
+// save, as the slit-scan does: the frame with the logo small in the corner, in paper white
+const logo = new Image()
+logo.src = '/assets/img/logo/white.png'
+const isPhone = () => /iPad|iPhone|iPod|Android/.test(navigator.userAgent) || window.innerWidth <= 600
+saveBtn.addEventListener('click', () => {
+  const c = document.createElement('canvas')
+  c.width = W
+  c.height = H
+  const o = c.getContext('2d')!
+  o.drawImage(canvas, 0, 0)
+  if (logo.complete && logo.naturalWidth) {
+    const s = 36
+    const tint = document.createElement('canvas')
+    tint.width = tint.height = s
+    const t = tint.getContext('2d')!
+    t.drawImage(logo, 0, 0, s, s)
+    t.globalCompositeOperation = 'source-in'
+    t.fillStyle = `rgb(${PAPER.join(',')})`
+    t.fillRect(0, 0, s, s)
+    o.drawImage(tint, W - s - 12, H - s - 12)
   }
-  requestAnimationFrame(frame)
-}
-requestAnimationFrame(frame)
+  const url = c.toDataURL('image/png')
+  if (isPhone()) {
+    overlayImg.src = url
+    overlay.hidden = false
+    stop()
+  } else {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `window-${Date.now()}.png`
+    a.click()
+  }
+})
+overlay.addEventListener('click', () => {
+  overlay.hidden = true
+  start()
+})
+
+startBtn.addEventListener('click', () => {
+  startBtn.textContent = 'starting…'
+  start()
+})
+requestAnimationFrame(draw)

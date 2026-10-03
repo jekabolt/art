@@ -1,16 +1,25 @@
-html,
-body {
-    margin: 0;
-    height: 100%;
-    overflow: hidden;
-    overscroll-behavior: none;
-    background: #000;
+/* The slit-scan's dress, in a square frame. */
+.site.slit .slit-frame {
+    aspect-ratio: 1 / 1;
+    max-width: 600px;
 }
 
-canvas {
-    display: block;
-    width: 100vw;
-    height: 100vh;
-    touch-action: none;
+.site.slit .slit-bar {
+    max-width: 600px;
 }
 
+.site .window-start {
+    border: 0;
+    color: #fff;
+    font: inherit;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.site .window-start:hover {
+    text-decoration: underline;
+}
+
+.site .window-start[hidden] {
+    display: none;
+}
