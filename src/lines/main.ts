@@ -20,7 +20,7 @@ const LOOK = {
   plateLg: 0.42,
   rest: { x: -0.5, y: 0.0 }, // radians: the plate tipped back so the relief lifts the lines
   turn: { x: [-1.2, -0.1], y: [-0.7, 0.7] },
-  margin: 0.08, // flat border round the mark, plate widths
+  margin: 0.025, // flat border round the mark, plate widths
 }
 
 // --- the relief: the mark's strokes blurred at a tight and a wide radius -------------------------------
