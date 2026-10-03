@@ -13,6 +13,7 @@ import * as THREE from 'three'
 import { mergeBufferGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils'
 import { logoBars } from '../core/logo-bars'
 import { LOGO_STROKE } from '../core/logo-path'
+import { haptic } from '../core/haptic'
 import './extrude.css'
 
 const LOOK = {
@@ -172,6 +173,7 @@ const release = (e: PointerEvent) => {
   if (drag && e.pointerId === drag.id) drag = null
   if (press && e.type === 'pointerup' && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 12 && performance.now() - press.t < 350) {
     tapAt = performance.now()
+    haptic([18, 60, 28]) // the press, a beat, the material giving (one tick on an iPhone)
   }
   press = null
 }
