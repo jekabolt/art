@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <!-- maximum-scale: iOS Safari would zoom in on the 12 px fields when they take focus; pinch-zoom still works there. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>GRBPWR — QR</title>
+    <meta name="description" content="Generative studies of the GRBPWR mark." />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="GRBPWR" />
+    <meta property="og:title" content="GRBPWR — QR" />
+    <meta property="og:description" content="Generative studies of the GRBPWR mark." />
+    <meta property="og:url" content="https://art.grbpwr.com/qr" />
+    <meta property="og:image" content="https://art.grbpwr.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="GRBPWR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="GRBPWR — QR" />
+    <meta name="twitter:description" content="Generative studies of the GRBPWR mark." />
+    <meta name="twitter:image" content="https://art.grbpwr.com/og.png" />
+</head>
+
+<body class="site">
+    <header class="site-bar">
+        <a href="/">grbpwr / art</a>
+        <span>qr</span>
+    </header>
+
+    <main class="qr">
+        <div class="qr-controls">
+            <label class="qr-row">
+                <span class="qr-label">url</span>
+                <input id="url" class="qr-url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="https://grbpwr.com" />
+            </label>
+            <label class="qr-row">
+                <span class="qr-label">correct level</span>
+                <input id="level" type="range" min="0" max="3" step="1" value="3" />
+                <span id="level-out" class="qr-out">30%</span>
+            </label>
+            <label class="qr-row">
+                <span class="qr-label">contrast</span>
+                <input id="contrast" type="range" min="-100" max="100" step="1" value="0" />
+                <span id="contrast-out" class="qr-out">0</span>
+            </label>
+            <label class="qr-row">
+                <span class="qr-label">brightness</span>
+                <input id="brightness" type="range" min="-100" max="100" step="1" value="0" />
+                <span id="brightness-out" class="qr-out">0</span>
+            </label>
+            <p id="note" class="qr-note" aria-live="polite"></p>
+            <span id="download-box" class="qr-dl">
+                <button id="download" type="button" class="button" aria-expanded="false">download</button>
+                <button id="download-png" type="button" class="button" data-format="png" hidden>png</button>
+                <button id="download-svg" type="button" class="button" data-format="svg" hidden>svg</button>
+            </span>
+        </div>
+        <div class="qr-stage">
+            <svg id="code" class="qr-code" role="img" aria-label="QR code" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+    </main>
+
+    <script type="module" src="/src/qr/main.ts"></script>
+</body>
+
+</html>
