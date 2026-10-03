@@ -154,27 +154,13 @@ canvas.addEventListener('pointerup', (e) => {
   press = null
 })
 
-// save, as the slit-scan does: the frame with the logo small in the corner, in paper white
-const logo = new Image()
-logo.src = '/assets/img/logo/white.png'
+// save: the frame as it is, as a PNG
 const isPhone = () => /iPad|iPhone|iPod|Android/.test(navigator.userAgent) || window.innerWidth <= 600
 saveBtn.addEventListener('click', () => {
   const c = document.createElement('canvas')
   c.width = W
   c.height = H
-  const o = c.getContext('2d')!
-  o.drawImage(canvas, 0, 0)
-  if (logo.complete && logo.naturalWidth) {
-    const s = 36
-    const tint = document.createElement('canvas')
-    tint.width = tint.height = s
-    const t = tint.getContext('2d')!
-    t.drawImage(logo, 0, 0, s, s)
-    t.globalCompositeOperation = 'source-in'
-    t.fillStyle = `rgb(${PAPER.join(',')})`
-    t.fillRect(0, 0, s, s)
-    o.drawImage(tint, W - s - 12, H - s - 12)
-  }
+  c.getContext('2d')!.drawImage(canvas, 0, 0)
   const url = c.toDataURL('image/png')
   if (isPhone()) {
     overlayImg.src = url
