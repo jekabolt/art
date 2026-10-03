@@ -1,6 +1,8 @@
 // EXTRUDE: the logo pulled out into a long grey solid, the way a 2023 story showed it — flat grey
-// faces, the body running far back and sinking into the black. A finger (or the mouse) turns it a
-// little; let go and it eases back to its pose.
+// faces, the body running far back and sinking into the black, its tail flickering: the far end is
+// cut by a moving field, |sin| of a diagonal wave against a threshold that drifts with time (the
+// same function the old emboss shader cut its layers with), and the cut edge shivers a little every
+// frame. A finger (or the mouse) turns it a little; let go and it eases back to its pose.
 //
 // The solid is the logo's bars (core/logo-bars: rectangles that add up to the mark) each extruded
 // into a box. Shading is flat and hand-made: a grey by face direction, darkened along the depth.
@@ -61,13 +63,17 @@ const mat = new THREE.ShaderMaterial({
     sideHi: { value: LOOK.side[1] },
     far: { value: LOOK.far },
     depth: { value: D },
+    time: { value: 0 },
   },
+  side: THREE.DoubleSide,
   vertexShader: /* glsl */ `
     varying vec3 vN;
     varying float vFace;
     varying float vDepth;
+    varying vec2 vXY;
     uniform float depth;
     void main() {
+      vXY = position.xy / 516.0; // the mark's width = 1
       vN = normalize(mat3(modelMatrix) * normal);
       vFace = step(0.99, normal.z);
       vDepth = clamp(-position.z / depth, 0.0, 1.0);
@@ -77,15 +83,31 @@ const mat = new THREE.ShaderMaterial({
     varying vec3 vN;
     varying float vFace;
     varying float vDepth;
-    uniform float face, sideLo, sideHi, far;
+    varying vec2 vXY;
+    uniform float face, sideLo, sideHi, far, time;
+
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
     void main() {
+      // The tail: where the body ends is a field, not a plane. A diagonal wave runs across the mark
+      // and the depth it reaches is |sin| of it, swinging with a slower cross wave; the cut edge
+      // gets a per-pixel jitter re-rolled twelve times a second, so it flickers like the story did.
+      float w = sin((vXY.x + vXY.y) * 3.1 + time * 1.4);
+      float cross = sin((vXY.x - vXY.y) * 4.7 - time * 0.9) * 0.5 + 0.5;
+      float reach = 0.02 + 0.8 * abs(w) * (0.5 + 0.5 * cross); // near a node of the wave it cuts into the face
+      float shiver = (hash(floor(gl_FragCoord.xy / 2.0) + floor(time * 12.0)) - 0.5) * 0.05;
+      if (vDepth > reach + shiver) discard;
+
+      // inside of the cut: the hollow of the walls, dark
+      if (!gl_FrontFacing) { gl_FragColor = vec4(vec3(far * 0.6), 1.0); return; }
+
       vec3 n = normalize(vN);
       // a soft light from the upper left, in front: the faces turned to it read lighter
       float l = dot(n, normalize(vec3(-0.5, 0.7, 0.6))) * 0.5 + 0.5;
       float g = mix(sideLo, sideHi, l);
       g = mix(g, face, vFace);
       // the body sinks into the dark towards its far end
-      g = mix(g, far, pow(vDepth, 0.75));
+      g = mix(g, far, pow(vDepth / 0.8, 0.9) * 0.85);
       gl_FragColor = vec4(vec3(g) * vec3(0.98, 0.97, 1.0), 1.0);
     }`,
 })
@@ -153,6 +175,7 @@ function frame() {
   const sway = { x: Math.sin(t * 0.35) * 2, y: Math.sin(t * 0.27 + 1) * 3 }
   pivot.rotation.set(rad(LOOK.rest.x + pose.x + sway.x), rad(LOOK.rest.y + pose.y + sway.y), 0)
   pivot.position.set(-centre.x, -centre.y, 0)
+  mat.uniforms.time.value = t
   renderer.render(scene, camera)
   requestAnimationFrame(frame)
 }
