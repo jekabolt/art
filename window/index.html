@@ -34,7 +34,7 @@
     <main class="slit-main">
         <div class="slit-frame">
             <canvas id="scan" width="600" height="600" aria-label="the camera, in black and white: inside the GRBPWR logo it shows now, outside it three seconds ago; tap to swap"></canvas>
-            <button id="start" type="button" class="slit-overlay window-start">turn on camera</button>
+            <div class="slit-overlay window-start"><button id="start" type="button" class="window-btn">turn on camera</button></div>
             <div id="overlay" class="slit-overlay" hidden>
                 <img alt="window picture — hold to save" />
                 <span>hold to save · tap to go on</span>
@@ -42,10 +42,7 @@
         </div>
         <div class="slit-bar">
             <span id="status" class="slit-status" aria-live="polite"></span>
-            <button id="save" type="button" class="slit-save" aria-label="save picture">
-                <img src="/assets/img/logo/white.png" alt="" width="32" height="32" />
-                <span>save</span>
-            </button>
+            <button id="save" type="button" class="window-btn">save</button>
         </div>
     </main>
 

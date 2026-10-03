@@ -8,18 +8,23 @@
     max-width: 600px;
 }
 
-.site .window-start {
-    border: 0;
+.site .window-start[hidden] {
+    display: none;
+}
+
+/* Buttons: an outline, as on the rest of the site. */
+.site .window-btn {
+    height: 32px;
+    padding: 0 16px;
+    border: 1px solid #fff;
+    background: #000;
     color: #fff;
-    font: inherit;
     text-transform: uppercase;
     cursor: pointer;
 }
 
-.site .window-start:hover {
-    text-decoration: underline;
-}
-
-.site .window-start[hidden] {
-    display: none;
+.site .window-btn:hover,
+.site .window-btn:focus-visible {
+    background: #fff;
+    color: #000;
 }

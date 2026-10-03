@@ -4,7 +4,7 @@
 // logo, just you; move and the mark cuts itself out of the difference between you now and you a
 // moment ago. A tap on the picture swaps them (the past inside, now outside). The camera starts from
 // a button over the frame, and the picture runs as soon as it is allowed — no second tap; the logo
-// button saves the frame as a PNG.
+// save keeps the frame as a PNG.
 import '../core/embed'
 import { haptic } from '../core/haptic'
 import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
@@ -52,6 +52,7 @@ const inside = (() => {
 })()
 
 const startBtn = document.getElementById('start') as HTMLButtonElement
+const startBox = startBtn.parentElement as HTMLElement
 const video = document.createElement('video')
 video.muted = true
 video.playsInline = true
@@ -76,10 +77,10 @@ async function start() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
     video.srcObject = stream
     await video.play()
-    startBtn.hidden = true
-    statusEl.textContent = 'move — the logo is the difference'
+    startBox.hidden = true
+    statusEl.textContent = ''
   } catch (err) {
-    startBtn.hidden = false
+    startBox.hidden = false
     startBtn.textContent = 'turn on camera'
     statusEl.textContent =
       (err as { name?: string })?.name === 'NotAllowedError'
