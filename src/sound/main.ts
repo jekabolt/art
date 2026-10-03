@@ -1,8 +1,10 @@
 // SOUND: the logo drawn in white horizontal lines on black — a scan of the mark, each line seen only
-// where it crosses a stroke. With the microphone on, the lines tremble with the room: each one is
-// bent by the sound's own waveform (a different stretch of it per line) and swings as hard as its
-// band of the spectrum is loud — the low end at the foot of the mark, the highs at the top. Left
-// silent the lines barely breathe. A tap plucks the line under the finger: it rings and dies away.
+// where it crosses a stroke. With the microphone on, the mark breathes with the room: in silence the
+// lines are hairlines; sound swells them — each by the overall loudness and by its own band of the
+// spectrum (the low end at the foot of the mark, the highs at the top) — until at a peak they
+// close up and the mark goes solid white. The lines also bend with the sound's own waveform.
+// Everything is measured against the room's recent peak (a slow automatic gain), so a voice in a
+// quiet room moves it as much as music in a loud one. A tap plucks a line: it rings and dies away.
 import '../core/embed'
 import { EMBEDDED } from '../core/embed'
 import { haptic } from '../core/haptic'
@@ -52,6 +54,9 @@ let analyser: AnalyserNode | null = null
 let wave = new Float32Array(2048)
 let spectrum = new Uint8Array(1024)
 const level = new Float32Array(LOOK.lines) // smoothed loudness of each line's band, 0..1
+const bandPeak = new Float32Array(LOOK.lines).fill(0.1) // each band's recent peak (the automatic gain)
+let loud = 0 // smoothed overall loudness, 0..1
+let loudPeak = 0.02 // the room's recent peak RMS
 
 const button = document.getElementById('mic') as HTMLButtonElement
 // a framed page has no microphone unless the host allows it; plucking still works there
@@ -150,12 +155,21 @@ function frame(now: number) {
     analyser.getFloatTimeDomainData(wave)
     analyser.getByteFrequencyData(spectrum)
     const rate = analyser.context.sampleRate
+    // overall loudness against the room's recent peak; the peak sinks slowly, never below a floor
+    let ss = 0
+    for (let i = 0; i < wave.length; i++) ss += wave[i] * wave[i]
+    const rms = Math.sqrt(ss / wave.length)
+    loudPeak = Math.max(rms, loudPeak * Math.exp(-dt / 6), 0.012)
+    const lv = Math.min(1, Math.pow(rms / loudPeak, 0.7))
+    loud += (lv - loud) * (lv > loud ? 0.45 : 0.06)
     for (let l = 0; l < LOOK.lines; l++) {
       const [a, b] = bandOf(l, rate)
       let sum = 0
       for (let i = a; i <= b; i++) sum += spectrum[i]
-      const v = Math.min(1, Math.max(0, (sum / (b - a + 1) / 255 - 0.25) / 0.6))
-      level[l] += (v - level[l]) * (v > level[l] ? 0.5 : 0.08) // quick to swell, slow to settle
+      const raw = sum / (b - a + 1) / 255
+      bandPeak[l] = Math.max(raw, bandPeak[l] * Math.exp(-dt / 5), 0.12)
+      const v = Math.min(1, Math.pow(Math.max(0, raw - 0.04) / bandPeak[l], 1.4))
+      level[l] += (v - level[l]) * (v > level[l] ? 0.5 : 0.07) // quick to swell, slow to settle
     }
   }
   for (let l = 0; l < LOOK.lines; l++) pluck[l] *= Math.exp(-dt * 1.6)
@@ -164,8 +178,9 @@ function frame(now: number) {
   g.fillStyle = '#000'
   g.fillRect(0, 0, canvas.width, canvas.height)
   g.strokeStyle = '#fff'
-  g.lineWidth = 1.3 * dpr
-  g.lineCap = 'round'
+  const gap = side / LOOK.lines // line pitch, device px
+  const hair = 0.8 * dpr
+  g.lineCap = 'butt' // thick lines keep the strokes' edges square
   g.lineJoin = 'round'
 
   const swing = LOOK.swing * side
@@ -176,6 +191,10 @@ function frame(now: number) {
     const amp = level[l]
     const pk = pluck[l]
     const offset = Math.floor((l * 97) % (N / 2))
+    // breath: a hairline in silence, swelling with the room and with this line's band, up to
+    // almost closing the gap to the next line, so a loud moment turns the mark solid
+    const swell = Math.min(1, loud * 0.65 + amp * 0.55)
+    g.lineWidth = hair + (gap * 0.92 - hair) * swell * swell
     g.beginPath()
     for (const [a, b] of runs[l]) {
       const x0 = ox + a * side
@@ -188,7 +207,7 @@ function frame(now: number) {
         if (amp) {
           // ~250 samples across the mark, each averaged with its neighbours: a smooth trace
           const i = offset + Math.floor(u * N * 0.12)
-          d = ((wave[(i - 2 + N) % N] + wave[(i - 1 + N) % N] + wave[i % N] + wave[(i + 1) % N] + wave[(i + 2) % N]) / 5) * amp * swing * 3.2
+          d = ((wave[(i - 2 + N) % N] + wave[(i - 1 + N) % N] + wave[i % N] + wave[(i + 1) % N] + wave[(i + 2) % N]) / 5 / loudPeak) * amp * swing * 0.12
         }
         // a pluck: a string struck at pluckAt, ringing (the shape of a plucked string, triangular, decaying)
         if (pk > 0.002) {
