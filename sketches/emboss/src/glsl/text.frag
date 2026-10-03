@@ -7,8 +7,14 @@ uniform vec2 mb;
 uniform vec2 mc;
 uniform float line;
 uniform float time;
+// tap glint: a ring of light (centre, radius and half-width in world units, strength 0..1)
+uniform vec2 glintAt;
+uniform float glintR;
+uniform float glintW;
+uniform float glintK;
 
 varying vec2 vUv;
+varying vec2 vWorld;
 
 void main(void) {
   vec3 p = vec3(vUv, 0.0);
@@ -36,6 +42,14 @@ void main(void) {
   v = mix(vUv, v, distance(bp, vUv) * -0.19);
   float f = sin(v.x + v.y);
   dest.a *= smoothstep(abs(f), line, distance(bp, vUv) * 1.0);
+
+  if (glintK > 0.0) {
+    // a bright crest with a dark trough just inside it: the light reads on white relief too
+    float d = (distance(vWorld, glintAt) - glintR) / glintW;
+    float crest = exp(-d * d);
+    float trough = exp(-(d + 2.2) * (d + 2.2));
+    dest.rgb = clamp(dest.rgb + (crest - trough * 0.6) * glintK, 0.0, 1.0);
+  }
 
   gl_FragColor = dest;
 

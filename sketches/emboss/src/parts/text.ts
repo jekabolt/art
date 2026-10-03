@@ -11,6 +11,15 @@ import { Conf } from '../core/conf';
 import { Func } from '../core/func';
 import { MousePointer } from '../core/mousePointer';
 import { Util } from '../libs/util';
+import { Vector3 } from 'three/src/math/Vector3';
+import { TAP_MODE, tapAge } from '../core/tap';
+
+/** wave: how long one layer swells, and the lag from one layer to the next (front → back). */
+const WAVE_DUR = 0.7;
+const WAVE_LAG = 0.006;
+/** glint: the ring's run time and how far it runs, in mark widths. */
+const GLINT_DUR = 1.1;
+const GLINT_REACH = 1.4;
 
 /** Plane size per pixel of the wanted mark width, measured at rest (front layer + relief). */
 const FIT_LG = 3.95;
@@ -23,6 +32,8 @@ export class Text extends MyObject3D {
   private _mesh: Mesh;
   private _scale: number = 1;
   private _noise: Vector2 = new Vector2(Util.instance.range(1), Util.instance.range(1));
+  /** Where the last tap hit the front plane (world units). */
+  private _tapAt: Vector3 = new Vector3();
 
   constructor(opt: {id: number, color: Color, useMask: boolean, scale: number}) {
     super();
@@ -49,11 +60,19 @@ export class Text extends MyObject3D {
           mc:{value:new Vector2(0.75, 0)},
           line:{value:Util.instance.map(this._noise.x, 0, 1, 0, Conf.instance.TEXT_NUM - 1)},
           time:{value:0},
+          glintAt:{value:new Vector2(0, 0)},
+          glintR:{value:0},
+          glintW:{value:1},
+          glintK:{value:0},
         }
       })
     )
     this.add(this._mesh);
     this._mesh.renderOrder = Conf.instance.TEXT_NUM - this._noise.x;
+  }
+
+  public onTap(at: Vector3): void {
+    this._tapAt.copy(at);
   }
 
   public setMask(p1: Vector2, p2: Vector2, p3: Vector2):void {
@@ -113,6 +132,33 @@ export class Text extends MyObject3D {
     this.position.z = Util.instance.map(this._noise.x, 0, -1, 0, Conf.instance.TEXT_NUM - 1) * s * 1.1;
 
     const uni = this._getUni(this._mesh);
+    const markW = s / this._scale / (xs ? FIT_XS : FIT_LG);
+
+    if (TAP_MODE === 'wave') {
+      // Each layer swells once, the front first and the back last, and is pushed away from the
+      // finger by up to a fifth of the mark: the relief bulges out from where it was touched.
+      const lt = tapAge() - this._noise.x * WAVE_LAG;
+      if (lt > 0 && lt < WAVE_DUR) {
+        const env = Math.sin((Math.PI * lt) / WAVE_DUR) * (1 - lt / WAVE_DUR * 0.5);
+        const depth = this._noise.x / (Conf.instance.TEXT_NUM - 1);
+        this._mesh.scale.multiplyScalar(1 + 0.12 * env);
+        const dx = -this._tapAt.x;
+        const dy = -this._tapAt.y;
+        const len = Math.hypot(dx, dy) || 1;
+        this.position.x += (dx / len) * markW * 0.18 * env * depth;
+        this.position.y += (dy / len) * markW * 0.18 * env * depth;
+      }
+    } else if (TAP_MODE === 'glint') {
+      // A ring of light runs out from the finger; deeper layers catch it a little later, so it
+      // rolls over the bevels of the relief rather than sliding over a flat picture.
+      const lt = tapAge() - this._noise.x * 0.002;
+      const k = lt > 0 && lt < GLINT_DUR ? 1 - lt / GLINT_DUR : 0;
+      uni.glintAt.value.set(this._tapAt.x, this._tapAt.y);
+      uni.glintR.value = (lt / GLINT_DUR) * markW * GLINT_REACH * 2;
+      uni.glintW.value = markW * 0.07;
+      uni.glintK.value = k * k;
+    }
+
     uni.time.value += 0.1;
     uni.bp.value.set(
       Util.instance.map(mx, 0, 1, -1, 1),

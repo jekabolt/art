@@ -8,6 +8,11 @@ import { Color } from 'three/src/math/Color';
 import { Conf } from '../core/conf';
 import { HSL } from '../libs/hsl';
 import { MousePointer } from '../core/mousePointer';
+import { listenTaps } from '../core/tap';
+import { Raycaster } from 'three/src/core/Raycaster';
+import { Plane } from 'three/src/math/Plane';
+import { Vector2 } from 'three/src/math/Vector2';
+import { Vector3 } from 'three/src/math/Vector3';
 
 /** /emboss-black: black logo on white; /emboss-white (and the old /emboss): white on black. */
 const isBlack = (): boolean => /^\/emboss-black(\/|$)/.test(window.location.pathname);
@@ -15,6 +20,7 @@ const isBlack = (): boolean => /^\/emboss-black(\/|$)/.test(window.location.path
 export class Visual extends Canvas {
 
   private _con: Object3D;
+  private _texts: Text[] = [];
 
   constructor(opt: any) {
     super(opt);
@@ -38,14 +44,27 @@ export class Visual extends Canvas {
       hsl.l = isBlack() ? Util.instance.map(i, 0, 0.75, 0, num - 1) : Util.instance.map(i, 1, 0.25, 0, num - 1);
       col.setHSL(hsl.h, hsl.s, hsl.l);
 
-      this._con.add(new Text({
+      const text = new Text({
         id: i,
         color: col,
         useMask: true,
         // scale: Util.instance.random(1, 1.2),
         scale: Util.instance.map(i, 0.5, 1, 0, num - 1),
-      }));
+      });
+      this._texts.push(text);
+      this._con.add(text);
     }
+
+    // The tap lands on the front layer's plane (z = 0): the effects are placed in world units.
+    const ray = new Raycaster();
+    const front = new Plane(new Vector3(0, 0, 1), 0);
+    const hit = new Vector3();
+    listenTaps((x, y) => {
+      const ndc = new Vector2((x / Func.instance.sw()) * 2 - 1, -(y / Func.instance.sh()) * 2 + 1);
+      ray.setFromCamera(ndc, this.cameraPers);
+      if (!ray.ray.intersectPlane(front, hit)) return;
+      for (const t of this._texts) t.onTap(hit);
+    });
 
     this._resize();
   }
