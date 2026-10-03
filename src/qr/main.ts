@@ -137,6 +137,32 @@ function render(): boolean {
 
 for (const el of [urlEl, levelEl, contrastEl, brightnessEl]) el.addEventListener('input', render)
 
+// Sliders by hand: a touch anywhere on the line sets the value and drags from there (iOS only moves
+// the thumb when the thumb itself is grabbed, and a miss scrolls the page instead).
+for (const el of [levelEl, contrastEl, brightnessEl]) {
+  const set = (e: PointerEvent) => {
+    const r = el.getBoundingClientRect()
+    const thumb = 12
+    const k = Math.max(0, Math.min(1, (e.clientX - r.left - thumb / 2) / (r.width - thumb)))
+    const min = Number(el.min)
+    const max = Number(el.max)
+    const step = Number(el.step) || 1
+    const v = String(Math.round((min + k * (max - min)) / step) * step)
+    if (v !== el.value) {
+      el.value = v
+      render()
+    }
+  }
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault()
+    el.setPointerCapture(e.pointerId)
+    set(e)
+  })
+  el.addEventListener('pointermove', (e) => {
+    if (el.hasPointerCapture(e.pointerId)) set(e)
+  })
+}
+
 // --- download: png or svg ------------------------------------------------------------------------------
 let picking = false
 function pick(open: boolean) {

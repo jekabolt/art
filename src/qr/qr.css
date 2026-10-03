@@ -103,3 +103,28 @@
     height: auto;
     aspect-ratio: 1;
 }
+
+/* phones: no sideways pan of the page, so a drag on a slider stays on the slider */
+html:has(.qr),
+body:has(.qr) {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+}
+
+.site .qr-range {
+    touch-action: pan-y;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.qr-range::-webkit-slider-thumb {
+    box-shadow: none;
+}
+
+.qr-range::-moz-range-thumb {
+    box-shadow: none;
+}
+
+.qr-range::-webkit-slider-runnable-track {
+    box-shadow: none;
+    border: 0;
+}
