@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "build:sketches": "for s in emboss flare bayan; do (cd sketches/$s && npm ci && npm run build) || exit 1; done"
+    "build:sketches": "for s in emboss bayan; do (cd sketches/$s && npm ci && npm run build) || exit 1; done"
   },
   "devDependencies": {
     "@types/events": "^3.0.0",
