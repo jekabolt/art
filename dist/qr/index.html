@@ -28,7 +28,7 @@
   <link rel="modulepreload" href="/assets/modulepreload-polyfill.b7f2da20.js">
   <link rel="modulepreload" href="/assets/vendor.536cba25.js">
   <link rel="modulepreload" href="/assets/logo-path.248ebb5a.js">
-  <link rel="stylesheet" href="/assets/index.a587dd3c.css">
+  <link rel="stylesheet" href="/assets/index.72aa863f.css">
   <link rel="stylesheet" href="/assets/fonts.1580bea8.css">
   <link rel="stylesheet" href="/assets/site.6e128e7e.css">
 </head>
@@ -40,36 +40,34 @@
     </header>
 
     <main class="qr">
+        <label class="qr-row qr-row-url">
+            <span class="qr-label">url</span>
+            <input id="url" class="qr-url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="https://grbpwr.com" />
+        </label>
+        <p id="note" class="qr-note" aria-live="polite"></p>
+        <svg id="code" class="qr-code" role="img" aria-label="QR code" xmlns="http://www.w3.org/2000/svg"></svg>
         <div class="qr-controls">
             <label class="qr-row">
-                <span class="qr-label">url</span>
-                <input id="url" class="qr-url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="https://grbpwr.com" />
-            </label>
-            <label class="qr-row">
                 <span class="qr-label">correct level</span>
-                <input id="level" type="range" min="0" max="3" step="1" value="3" />
+                <input id="level" class="qr-range" type="range" min="0" max="3" step="1" value="3" />
                 <span id="level-out" class="qr-out">30%</span>
             </label>
             <label class="qr-row">
                 <span class="qr-label">contrast</span>
-                <input id="contrast" type="range" min="-100" max="100" step="1" value="0" />
+                <input id="contrast" class="qr-range" type="range" min="-100" max="100" step="1" value="0" />
                 <span id="contrast-out" class="qr-out">0</span>
             </label>
             <label class="qr-row">
                 <span class="qr-label">brightness</span>
-                <input id="brightness" type="range" min="-100" max="100" step="1" value="0" />
+                <input id="brightness" class="qr-range" type="range" min="-100" max="100" step="1" value="0" />
                 <span id="brightness-out" class="qr-out">0</span>
             </label>
-            <p id="note" class="qr-note" aria-live="polite"></p>
-            <span id="download-box" class="qr-dl">
-                <button id="download" type="button" class="button" aria-expanded="false">download</button>
-                <button id="download-png" type="button" class="button" data-format="png" hidden>png</button>
-                <button id="download-svg" type="button" class="button" data-format="svg" hidden>svg</button>
-            </span>
         </div>
-        <div class="qr-stage">
-            <svg id="code" class="qr-code" role="img" aria-label="QR code" xmlns="http://www.w3.org/2000/svg"></svg>
-        </div>
+        <span id="download-box" class="qr-dl">
+            <button id="download" type="button" class="button" aria-expanded="false">download</button>
+            <button id="download-png" type="button" class="button" data-format="png" hidden>png</button>
+            <button id="download-svg" type="button" class="button" data-format="svg" hidden>svg</button>
+        </span>
     </main>
 
     

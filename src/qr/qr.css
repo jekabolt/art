@@ -1,30 +1,28 @@
+/* One column: the url, the code, then its settings and the download under it. */
 .qr {
-    display: grid;
-    gap: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
     padding: 0 var(--gutter) var(--gutter);
-}
-
-@media (min-width: 800px) {
-    .qr {
-        grid-template-columns: minmax(280px, 400px) minmax(0, 560px);
-        align-items: start;
-    }
 }
 
 .qr-controls {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 14px;
 }
 
 .qr-row {
     display: grid;
     grid-template-columns: 112px 1fr 40px;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
 }
 
-.qr-row:first-child {
+.qr-row-url {
     grid-template-columns: 112px 1fr;
 }
 
@@ -41,20 +39,62 @@
     text-align: right;
 }
 
-.qr input[type='range'] {
+/* sliders in the site's line: a 1px rule and a square handle */
+.site .qr-range {
+    -webkit-appearance: none;
+    appearance: none;
     width: 100%;
-    accent-color: var(--ink);
+    height: 28px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.qr-range::-webkit-slider-runnable-track {
+    height: 1px;
+    background: var(--ink);
+}
+
+.qr-range::-moz-range-track {
+    height: 1px;
+    background: var(--ink);
+}
+
+.qr-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -5.5px;
+    border: 1px solid var(--ink);
+    border-radius: 0;
+    background: var(--ink);
+}
+
+.qr-range::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--ink);
+    border-radius: 0;
+    background: var(--ink);
+}
+
+.qr-note:empty {
+    display: none;
 }
 
 .qr-note {
-    min-height: 1.4em;
     text-transform: none;
     color: var(--error);
 }
 
 .qr-dl {
-    display: inline-flex;
+    display: flex;
     gap: 8px;
+}
+
+.site .qr-dl .button {
+    flex: 1;
+    height: 40px;
 }
 
 .qr-code {
