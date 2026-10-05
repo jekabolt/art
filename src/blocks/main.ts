@@ -1,4 +1,4 @@
-// BLOCKS: the logo built from black and white blocks — cubes, bars and squat slabs — on a pale
+// BLOCKS: the logo built from black blocks — cubes, bars and squat slabs — on a pale
 // platform, in a few layers, and every block a real body: it has weight, falls, tips, slides and
 // knocks into the others. The mark is laid out on a grid (no two blocks overlap), each layer cut
 // into pieces at random, so every load is built a little differently.
@@ -17,7 +17,7 @@ import './blocks.css'
 
 const rand = Math.random
 const MARK = 10 // the logo's width, world units
-const C = ((LOGO_STROKE / LOGO_SPAN) * MARK) / 2 // a grid cell: half a stroke
+const C = (LOGO_STROKE / LOGO_SPAN) * MARK // a grid cell: one stroke wide
 const PLATFORM = 13.4
 const SLAB = 0.7
 
@@ -56,7 +56,6 @@ platformMesh.castShadow = true
 scene.add(platformMesh)
 
 const black = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.8, envMapIntensity: 0.2 })
-const white = new THREE.MeshStandardMaterial({ color: 0xf3f1eb, roughness: 0.75, envMapIntensity: 0.25 })
 
 // --- physics -----------------------------------------------------------------------------------------------------
 const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -30, 0) })
@@ -72,8 +71,8 @@ world.addBody(ground)
 type Block = { body: CANNON.Body; mesh: THREE.Mesh }
 const blocks: Block[] = []
 const byMesh = new Map<THREE.Object3D, Block>()
-function addBlock(x: number, y: number, z: number, w: number, h: number, d: number, ink: boolean) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), ink ? black : white)
+function addBlock(x: number, y: number, z: number, w: number, h: number, d: number) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), black)
   mesh.castShadow = true
   mesh.receiveShadow = true
   scene.add(mesh)
@@ -141,10 +140,10 @@ const gap = 0.006
 let layer = filled
 let y = 0
 for (let l = 0; l < 3; l++) {
-  const tall = l === 0 ? 2 : rand() < 0.5 ? 1 : 2 // in cells
+  const tall = l === 0 ? 1 : rand() < 0.4 ? 0.5 : 1 // in cells
   const h = C * tall
   for (const p of cut(layer)) {
-    addBlock(cellX(p.i) + ((p.w - 1) * C) / 2, y + gap, cellZ(p.j) + ((p.d - 1) * C) / 2, p.w * C - gap * 2, h - gap, p.d * C - gap * 2, l === 0 ? rand() < 0.9 : rand() < 0.7)
+    addBlock(cellX(p.i) + ((p.w - 1) * C) / 2, y + gap, cellZ(p.j) + ((p.d - 1) * C) / 2, p.w * C - gap * 2, h - gap, p.d * C - gap * 2)
   }
   y += h
   // the next layer stands on part of this one, in patches
@@ -158,10 +157,10 @@ for (let l = 0; l < 3; l++) {
   })
 }
 // a few loose ones round it
-for (let i = 0; i < 7; i++) {
+for (let i = 0; i < 5; i++) {
   const a = rand() * Math.PI * 2
   const r = 5.6 + rand() * 0.6
-  addBlock(Math.cos(a) * r, 0.02, Math.sin(a) * r, C * 2 * (rand() < 0.5 ? 1 : 2), C * 2, C * 2, rand() < 0.5)
+  addBlock(Math.cos(a) * r, 0.02, Math.sin(a) * r, C * (rand() < 0.5 ? 1 : 2), C, C)
 }
 
 // --- camera ------------------------------------------------------------------------------------------------------
@@ -218,7 +217,7 @@ canvas.addEventListener('pointerdown', (e) => {
     block.body.wakeUp()
     block.body.angularDamping = 0.6
     // carried a little above where it was taken
-    grip = { id: e.pointerId, block, joint, height: p.y + C * 3 }
+    grip = { id: e.pointerId, block, joint, height: p.y + C * 1.6 }
     plane.constant = -p.y
     haptic(8)
   } else turning = { id: e.pointerId, x: e.clientX, y: e.clientY }
@@ -227,7 +226,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (grip && e.pointerId === grip.id) {
     setRay(e)
     if (ray.ray.intersectPlane(plane, hit)) {
-      const lim = PLATFORM / 2 - C * 2
+      const lim = PLATFORM / 2 - C
       hand.position.set(Math.max(-lim, Math.min(lim, hit.x)), hand.position.y, Math.max(-lim, Math.min(lim, hit.z)))
     }
   } else if (turning && e.pointerId === turning.id) {
