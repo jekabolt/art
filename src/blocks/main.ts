@@ -1,30 +1,32 @@
-// BLOCKS: the logo built from black and white blocks — cubes and long bars — on a pale platform,
-// in a few layers: every stroke cut into pieces, some pieces stacked two or three high. Each load
-// cuts and stacks it a little differently.
-// Drag a block to carry it: it lifts clear of whatever it passes over and, let go, settles on top of
-// what is under it; whatever stood on it drops down. A tap on a block turns it a quarter round.
-// Drag the empty space to look round the platform; the wheel moves closer or further.
+// BLOCKS: the logo built from black and white blocks — cubes, bars and squat slabs — on a pale
+// platform, in a few layers, and every block a real body: it has weight, falls, tips, slides and
+// knocks into the others. The mark is laid out on a grid (no two blocks overlap), each layer cut
+// into pieces at random, so every load is built a little differently.
+// Drag a block and it is carried on a spring under your finger, swinging, bumping whatever it meets;
+// let go and it drops. Pull one out from under a stack and the stack comes down. A tap flips a
+// block into the air. Drag the empty space to look round; the wheel moves closer. Whatever falls off
+// the platform drops back onto it from above.
 import '../core/embed'
 import { EMBEDDED } from '../core/embed'
 import * as THREE from 'three'
+import * as CANNON from 'cannon-es'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment'
 import { haptic } from '../core/haptic'
-import { logoBars } from '../core/logo-bars'
-import { LOGO_STROKE } from '../core/logo-path'
+import { LOGO_MIN, LOGO_PATH, LOGO_SPAN, LOGO_STROKE } from '../core/logo-path'
 import './blocks.css'
 
 const rand = Math.random
-const K = 10 / 516 // logo units → world: the mark is 10 wide
-const U = LOGO_STROKE * K // a stroke's width, and a block's height unit
+const MARK = 10 // the logo's width, world units
+const C = ((LOGO_STROKE / LOGO_SPAN) * MARK) / 2 // a grid cell: half a stroke
 const PLATFORM = 13.4
 const SLAB = 0.7
 
+// --- three -----------------------------------------------------------------------------------------------------
 const canvas = document.getElementById('blocks') as HTMLCanvasElement
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
 renderer.outputEncoding = THREE.sRGBEncoding
 renderer.toneMapping = THREE.ACESFilmicToneMapping
-renderer.toneMappingExposure = 1.0
 renderer.shadowMap.enabled = true
 renderer.shadowMap.type = THREE.PCFSoftShadowMap
 const scene = new THREE.Scene()
@@ -44,140 +46,125 @@ sun.shadow.normalBias = 0.02
 sun.shadow.radius = 4
 scene.add(sun)
 
-const platform = new THREE.Mesh(new THREE.BoxGeometry(PLATFORM, SLAB, PLATFORM), new THREE.MeshStandardMaterial({ color: 0xd8d4cb, roughness: 0.95, envMapIntensity: 0.25 }))
-platform.position.y = -SLAB / 2
-platform.receiveShadow = true
-platform.castShadow = true
-scene.add(platform)
+const platformMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(PLATFORM, SLAB, PLATFORM),
+  new THREE.MeshStandardMaterial({ color: 0xd8d4cb, roughness: 0.95, envMapIntensity: 0.25 }),
+)
+platformMesh.position.y = -SLAB / 2
+platformMesh.receiveShadow = true
+platformMesh.castShadow = true
+scene.add(platformMesh)
 
-// --- the blocks ---------------------------------------------------------------------------------------------
 const black = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.8, envMapIntensity: 0.2 })
 const white = new THREE.MeshStandardMaterial({ color: 0xf3f1eb, roughness: 0.75, envMapIntensity: 0.25 })
-type Block = {
-  mesh: THREE.Mesh
-  w: number // along its own x
-  d: number // along its own z
-  h: number
-  x: number
-  z: number
-  yaw: number
-  yawGoal: number
-  bottom: number // y of its underside
-  vy: number
-}
+
+// --- physics -----------------------------------------------------------------------------------------------------
+const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -30, 0) })
+world.allowSleep = true
+world.broadphase = new CANNON.SAPBroadphase(world)
+;(world.solver as CANNON.GSSolver).iterations = 12
+world.defaultContactMaterial.friction = 0.55
+world.defaultContactMaterial.restitution = 0.08
+const ground = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(PLATFORM / 2, SLAB / 2, PLATFORM / 2)) })
+ground.position.set(0, -SLAB / 2, 0)
+world.addBody(ground)
+
+type Block = { body: CANNON.Body; mesh: THREE.Mesh }
 const blocks: Block[] = []
-function addBlock(x: number, z: number, yaw: number, w: number, d: number, h: number, bottom: number, ink: boolean) {
+const byMesh = new Map<THREE.Object3D, Block>()
+function addBlock(x: number, y: number, z: number, w: number, h: number, d: number, ink: boolean) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), ink ? black : white)
   mesh.castShadow = true
   mesh.receiveShadow = true
   scene.add(mesh)
-  const b: Block = { mesh, w, d, h, x, z, yaw, yawGoal: yaw, bottom, vy: 0 }
+  const body = new CANNON.Body({
+    mass: w * h * d * 8,
+    shape: new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)),
+    position: new CANNON.Vec3(x, y + h / 2, z),
+    linearDamping: 0.05,
+    angularDamping: 0.12,
+    sleepSpeedLimit: 0.15,
+    sleepTimeLimit: 0.6,
+  })
+  world.addBody(body)
+  body.sleep() // the logo stands still until something touches it
+  const b = { body, mesh }
   blocks.push(b)
-  place(b)
-}
-function place(b: Block) {
-  b.mesh.position.set(b.x, b.bottom + b.h / 2, b.z)
-  b.mesh.rotation.y = b.yaw
+  byMesh.set(mesh, b)
 }
 
-// every stroke cut into pieces along its length, some stacked
-for (const s of logoBars()) {
-  const ax = (s.ax - 300) * K
-  const az = (s.ay - 300) * K
-  const bx = (s.bx - 300) * K
-  const bz = (s.by - 300) * K
-  const len = Math.hypot(bx - ax, bz - az)
-  const ux = (bx - ax) / len
-  const uz = (bz - az) / len
-  const yaw = Math.atan2(-uz, ux)
-  let at = 0
-  while (at < len - 1e-3) {
-    // a cube, or a bar two to four strokes long
-    let piece = rand() < 0.35 ? U : U * (2 + Math.floor(rand() * 3))
-    if (len - at - piece < U * 0.7) piece = len - at
-    const mid = at + piece / 2
-    const cx = ax + ux * mid
-    const cz = az + uz * mid
-    // one to three layers, each a slab or a full block, black or white
-    const layers = 1 + (rand() < 0.38 ? 1 : 0) + (rand() < 0.12 ? 1 : 0)
-    let y = 0
-    for (let l = 0; l < layers; l++) {
-      const h = U * (rand() < 0.3 ? 0.5 : 1) + rand() * 0.01
-      const ink = l === 0 ? rand() < 0.9 : rand() < 0.75
-      // the upper layers are sometimes shorter than the piece under them
-      const w = l === 0 || piece <= U * 1.01 ? piece : piece * (rand() < 0.5 ? 1 : 0.5)
-      const shift = (piece - w) / 2 * (rand() < 0.5 ? -1 : 1)
-      addBlock(cx + ux * shift, cz + uz * shift, yaw + (l ? (rand() - 0.5) * 0.06 : 0), w - 0.012, U - 0.012, h, y, ink)
-      y += h
+// --- the logo on a grid, cut into pieces layer by layer ----------------------------------------------------------
+const N = Math.round(MARK / C)
+const filled: boolean[] = new Array(N * N).fill(false)
+{
+  const px = 8
+  const c = document.createElement('canvas')
+  c.width = c.height = N * px
+  const g = c.getContext('2d', { willReadFrequently: true })!
+  g.scale((N * px) / LOGO_SPAN, (N * px) / LOGO_SPAN)
+  g.translate(-LOGO_MIN, -LOGO_MIN)
+  g.lineWidth = LOGO_STROKE
+  g.stroke(new Path2D(LOGO_PATH))
+  const d = g.getImageData(0, 0, N * px, N * px).data
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) filled[j * N + i] = d[((j * px + px / 2) * N * px + i * px + px / 2) * 4 + 3] > 110
+}
+const cellX = (i: number) => (i + 0.5) * C - MARK / 2
+const cellZ = (j: number) => (j + 0.5) * C - MARK / 2
+
+// cut a set of cells into pieces: 2x2 blocks, bars along x or z, single cubes
+function cut(cells: boolean[]) {
+  const taken = new Array(N * N).fill(false)
+  const order = [...Array(N * N).keys()].filter((k) => cells[k]).sort(() => rand() - 0.5)
+  const free = (i: number, j: number) => i >= 0 && j >= 0 && i < N && j < N && cells[j * N + i] && !taken[j * N + i]
+  const pieces: { i: number; j: number; w: number; d: number }[] = []
+  for (const k of order) {
+    const i = k % N
+    const j = (k - i) / N
+    if (!free(i, j)) continue
+    let w = 1
+    let d = 1
+    const r = rand()
+    if (r < 0.18 && free(i + 1, j) && free(i, j + 1) && free(i + 1, j + 1)) {
+      w = d = 2
+    } else if (r < 0.8) {
+      const len = 2 + Math.floor(rand() * 5)
+      if (rand() < 0.5) while (w < len && free(i + w, j)) w++
+      else while (d < len && free(i, j + d)) d++
     }
-    at += piece
+    for (let a = 0; a < w; a++) for (let b = 0; b < d; b++) taken[(j + b) * N + i + a] = true
+    pieces.push({ i, j, w, d })
   }
-}
-// and a few loose ones round it, to play with
-for (let i = 0; i < 6; i++) {
-  const side = Math.floor(rand() * 4)
-  const t = (rand() - 0.5) * 10
-  const edge = 5.9
-  const x = side === 0 ? t : side === 1 ? t : side === 2 ? -edge : edge
-  const z = side === 0 ? -edge : side === 1 ? edge : t
-  const cube = rand() < 0.6
-  addBlock(x, z, rand() * Math.PI, cube ? U : U * 3, U, U, 0, rand() < 0.5)
+  return pieces
 }
 
-// --- footprints: two blocks overlap when their rectangles (seen from above) do -----------------------------------
-function corners(b: Block, shrink = 0.02) {
-  const c = Math.cos(b.yaw)
-  const s = Math.sin(b.yaw)
-  const hw = b.w / 2 - shrink
-  const hd = b.d / 2 - shrink
-  // local x → (c, -s), local z → (s, c)
-  return [
-    [b.x + c * hw + s * hd, b.z - s * hw + c * hd],
-    [b.x - c * hw + s * hd, b.z + s * hw + c * hd],
-    [b.x - c * hw - s * hd, b.z + s * hw - c * hd],
-    [b.x + c * hw - s * hd, b.z - s * hw - c * hd],
-  ]
-}
-function overlap(a: Block, b: Block) {
-  if (Math.hypot(a.x - b.x, a.z - b.z) > (Math.hypot(a.w, a.d) + Math.hypot(b.w, b.d)) / 2) return false
-  const pa = corners(a)
-  const pb = corners(b)
-  for (const poly of [pa, pb]) {
-    for (let i = 0; i < 2; i++) {
-      const nx = -(poly[i + 1][1] - poly[i][1])
-      const nz = poly[i + 1][0] - poly[i][0]
-      let amin = Infinity
-      let amax = -Infinity
-      let bmin = Infinity
-      let bmax = -Infinity
-      for (const p of pa) {
-        const v = p[0] * nx + p[1] * nz
-        amin = Math.min(amin, v)
-        amax = Math.max(amax, v)
-      }
-      for (const p of pb) {
-        const v = p[0] * nx + p[1] * nz
-        bmin = Math.min(bmin, v)
-        bmax = Math.max(bmax, v)
-      }
-      if (amax <= bmin || bmax <= amin) return false
-    }
+const gap = 0.006
+let layer = filled
+let y = 0
+for (let l = 0; l < 3; l++) {
+  const tall = l === 0 ? 2 : rand() < 0.5 ? 1 : 2 // in cells
+  const h = C * tall
+  for (const p of cut(layer)) {
+    addBlock(cellX(p.i) + ((p.w - 1) * C) / 2, y + gap, cellZ(p.j) + ((p.d - 1) * C) / 2, p.w * C - gap * 2, h - gap, p.d * C - gap * 2, l === 0 ? rand() < 0.9 : rand() < 0.7)
   }
-  return true
+  y += h
+  // the next layer stands on part of this one, in patches
+  const ph = rand() * 10
+  const keep = l === 0 ? 0.32 : 0.22
+  layer = layer.map((on, k) => {
+    const i = k % N
+    const j = (k - i) / N
+    const n = Math.sin(i * 0.55 + ph) * Math.cos(j * 0.47 - ph * 1.3) * 0.5 + 0.5
+    return on && n < keep + (rand() - 0.5) * 0.1
+  })
 }
-// the highest top under a block's footprint, among blocks below it (or all others, when lifting)
-function support(b: Block, any: boolean) {
-  let top = 0
-  for (const o of blocks) {
-    if (o === b || o === held?.block) continue
-    const t = o.bottom + o.h
-    if (!any && t > b.bottom + 0.03) continue
-    if (t > top && overlap(b, o)) top = t
-  }
-  return top
+// a few loose ones round it
+for (let i = 0; i < 7; i++) {
+  const a = rand() * Math.PI * 2
+  const r = 5.6 + rand() * 0.6
+  addBlock(Math.cos(a) * r, 0.02, Math.sin(a) * r, C * 2 * (rand() < 0.5 ? 1 : 2), C * 2, C * 2, rand() < 0.5)
 }
 
-// --- camera: orbiting the platform ---------------------------------------------------------------------------
+// --- camera ------------------------------------------------------------------------------------------------------
 const orbit = { theta: -0.38, phi: 0.82, dist: 1 }
 let zoom = 1
 function fit() {
@@ -197,15 +184,19 @@ function aim() {
 }
 addEventListener('resize', fit)
 fit()
+aim()
 
-// --- input -----------------------------------------------------------------------------------------------------
+// --- input: carry on a spring, flip with a tap, orbit on empty space -----------------------------------------------
 const ray = new THREE.Raycaster()
 const ndc = new THREE.Vector2()
-const lift = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 const hit = new THREE.Vector3()
-let held: { block: Block; id: number; ox: number; oz: number } | null = null
+const hand = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC })
+hand.collisionResponse = false
+world.addBody(hand)
+let grip: { id: number; block: Block; joint: CANNON.PointToPointConstraint; height: number } | null = null
 let turning: { id: number; x: number; y: number } | null = null
-let press: { id: number; x: number; y: number; t: number; block: Block | null } | null = null
+let press: { id: number; x: number; y: number; t: number } | null = null
 const setRay = (e: PointerEvent) => {
   const r = canvas.getBoundingClientRect()
   ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
@@ -215,22 +206,29 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId)
   setRay(e)
   const found = ray.intersectObjects(blocks.map((b) => b.mesh))[0]
-  const block = found ? blocks.find((b) => b.mesh === found.object)! : null
-  press = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), block }
-  if (block) {
-    // carry it on a level plane through where it was grabbed
-    lift.constant = -found.point.y
-    held = { block, id: e.pointerId, ox: block.x - found.point.x, oz: block.z - found.point.z }
+  const block = found ? byMesh.get(found.object)! : null
+  press = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }
+  if (block && found) {
+    const p = found.point
+    // the pivot, in the block's own frame
+    const local = block.body.pointToLocalFrame(new CANNON.Vec3(p.x, p.y, p.z))
+    hand.position.set(p.x, p.y, p.z)
+    const joint = new CANNON.PointToPointConstraint(block.body, local, hand, new CANNON.Vec3(0, 0, 0), 60)
+    world.addConstraint(joint)
+    block.body.wakeUp()
+    block.body.angularDamping = 0.6
+    // carried a little above where it was taken
+    grip = { id: e.pointerId, block, joint, height: p.y + C * 3 }
+    plane.constant = -p.y
     haptic(8)
   } else turning = { id: e.pointerId, x: e.clientX, y: e.clientY }
 })
 canvas.addEventListener('pointermove', (e) => {
-  if (held && e.pointerId === held.id) {
+  if (grip && e.pointerId === grip.id) {
     setRay(e)
-    if (ray.ray.intersectPlane(lift, hit)) {
-      const lim = PLATFORM / 2 - U * 0.6
-      held.block.x = Math.max(-lim, Math.min(lim, hit.x + held.ox))
-      held.block.z = Math.max(-lim, Math.min(lim, hit.z + held.oz))
+    if (ray.ray.intersectPlane(plane, hit)) {
+      const lim = PLATFORM / 2 - C * 2
+      hand.position.set(Math.max(-lim, Math.min(lim, hit.x)), hand.position.y, Math.max(-lim, Math.min(lim, hit.z)))
     }
   } else if (turning && e.pointerId === turning.id) {
     orbit.theta -= (e.clientX - turning.x) * 0.008
@@ -241,15 +239,18 @@ canvas.addEventListener('pointermove', (e) => {
 })
 const up = (e: PointerEvent) => {
   if (!press || e.pointerId !== press.id) return
-  const tap = e.type === 'pointerup' && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 8 && performance.now() - press.t < 300
-  if (tap && press.block) {
-    press.block.yawGoal += Math.PI / 2
-    haptic([8, 30, 8])
-  }
-  if (held) {
-    // let go: it drops onto whatever is under it
-    if (!tap) haptic(12)
-    held = null
+  const tap = e.type === 'pointerup' && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 8 && performance.now() - press.t < 280
+  if (grip) {
+    world.removeConstraint(grip.joint)
+    const b = grip.block.body
+    b.angularDamping = 0.12
+    if (tap) {
+      // a flip: up and over
+      b.velocity.set((rand() - 0.5) * 2, 9, (rand() - 0.5) * 2)
+      b.angularVelocity.set((rand() - 0.5) * 16, (rand() - 0.5) * 6, (rand() - 0.5) * 16)
+      haptic([8, 30, 8])
+    } else haptic(10)
+    grip = null
   }
   turning = null
   press = null
@@ -259,32 +260,23 @@ canvas.addEventListener('pointercancel', up)
 addEventListener('wheel', (e) => (zoom = Math.max(0.55, Math.min(1.6, zoom * Math.exp(e.deltaY * 0.001)))), { passive: true })
 if (!EMBEDDED) addEventListener('touchmove', (e) => e.preventDefault(), { passive: false })
 
-// --- frame -------------------------------------------------------------------------------------------------------
+// --- frame ---------------------------------------------------------------------------------------------------------
 let last = performance.now()
 function frame(now: number) {
-  const dt = Math.min(0.04, (now - last) / 1000)
+  const dt = Math.min(0.05, (now - last) / 1000)
   last = now
-  // low first, so a tower settles from the bottom up
-  const order = [...blocks].sort((a, b) => a.bottom - b.bottom)
-  for (const b of order) {
-    b.yaw += (b.yawGoal - b.yaw) * Math.min(1, dt * 14)
-    if (held && b === held.block) {
-      // carried: clear of everything under it
-      const goal = support(b, true) + U * 0.35
-      b.bottom += (goal - b.bottom) * Math.min(1, dt * 16)
-      b.vy = 0
-    } else {
-      const floor = support(b, false)
-      if (b.bottom > floor + 1e-4) {
-        b.vy -= 40 * dt
-        b.bottom = Math.max(floor, b.bottom + b.vy * dt)
-        if (b.bottom === floor) b.vy = 0
-      } else {
-        b.bottom = floor
-        b.vy = 0
-      }
+  // the hand rises to its carrying height
+  if (grip) hand.position.y += (grip.height - hand.position.y) * Math.min(1, dt * 10)
+  world.step(1 / 60, dt, 4)
+  for (const b of blocks) {
+    // fallen off: dropped back on from above
+    if (b.body.position.y < -12) {
+      b.body.position.set((rand() - 0.5) * 8, 8 + rand() * 3, (rand() - 0.5) * 8)
+      b.body.velocity.set(0, 0, 0)
+      b.body.angularVelocity.set((rand() - 0.5) * 4, 0, (rand() - 0.5) * 4)
     }
-    place(b)
+    b.mesh.position.set(b.body.position.x, b.body.position.y, b.body.position.z)
+    b.mesh.quaternion.set(b.body.quaternion.x, b.body.quaternion.y, b.body.quaternion.z, b.body.quaternion.w)
   }
   aim()
   renderer.render(scene, camera)
