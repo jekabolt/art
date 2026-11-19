@@ -1,0 +1,93 @@
+html,
+body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: #fff;
+}
+
+canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* the logo, lifting off the sheet under the visitor's first stroke */
+.ghost {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+}
+
+/* the brush under the mouse: a line as wide as the brush */
+#nib {
+    position: fixed;
+    left: 0;
+    top: 0;
+    box-sizing: border-box;
+    border: 1px solid #fff;
+    transform-origin: 0 0;
+    mix-blend-mode: difference;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.keys {
+    position: fixed;
+    left: 20px;
+    bottom: 20px;
+    margin: 0;
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 6px 16px;
+    font: 11px/1.2 'FeatureMono', ui-monospace, monospace;
+    text-transform: lowercase;
+    pointer-events: none;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: opacity 0.3s ease-out;
+}
+
+/* the hints go with the first stroke */
+.taken .keys {
+    opacity: 0;
+}
+
+.keys dt,
+.keys dd {
+    margin: 0;
+}
+
+.keys dd {
+    opacity: 0.5;
+}
+
+.light .keys {
+    color: #000;
+}
+
+.dark .keys {
+    color: #fff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    html:not(.embedded) canvas {
+        cursor: none;
+    }
+}
+
+@media (hover: none), (pointer: coarse) {
+    .keys,
+    #nib {
+        display: none;
+    }
+}
+
+html.embedded .keys,
+html.embedded #nib {
+    display: none;
+}
