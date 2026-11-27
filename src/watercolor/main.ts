@@ -4,7 +4,7 @@
 // it your way (or tilt the phone), scroll for how steep, click to drop clean water: a big puddle, never
 // the same twice, that lifts the paint and pushes it out into a bloom with a dark rim.
 //
-// The sheet is a small simulation on the GPU, three sim px to four css px. Each pixel holds water, the
+// The sheet is a small simulation on the GPU, finer where the screen is sharp. Each pixel holds water, the
 // pigment floating in it, the pigment settled into the paper while the wash is wet, and the pigment
 // fixed for good once it has dried. Every step the water runs from the full middle of a wash to its thin
 // edges and leaves its pigment there as a rim; what the paper cannot hold slides downhill, pigment with
@@ -151,6 +151,8 @@ uniform float uEvap, uFadeP, uWLoss, uDep, uRim, uGran;
 uniform vec2 uGrav;
 uniform float uStart, uStop, uTrail, uCreep, uCreepWet, uPDiff, uWDiff, uLiftK, uPR, uBloom;
 uniform float uFlowG, uFlowN, uFlowCap;
+// sim px for every one the look was tuned at: spans and speeds in cells grow with it
+uniform float uR1;
 layout(location = 0) out vec4 oW;
 layout(location = 1) out vec4 oP;
 layout(location = 2) out vec4 oD;
@@ -164,6 +166,7 @@ vec3 P(vec2 p) { return texture(uP, p * uTexel).rgb; }
 float holdOf(float g, float hd, float hw) { return g > 0.8 ? uStop * hw : (g > 0.3 ? uTrail * hw : uStart * hd); }
 // lanes along the slope: where a run breaks out of a wash and where it holds back
 float laneAt(vec2 q, vec2 gd, vec2 gn) {
+  q /= uR1;
   return vnoise(vec2(dot(q, gn) / 62.0, dot(q, gd) / 220.0) + 17.0) * 0.78
        + vnoise(vec2(dot(q, gn) / 17.0, dot(q, gd) / 40.0) + 5.0) * 0.22;
 }
@@ -177,16 +180,19 @@ float holdAt(vec2 q, float g, vec2 gd, vec2 gn) {
 vec3 conc(vec3 P, float w) { return P / max(w, 1e-3); }
 // the slope at a face, wandering a little across it so runs meander
 vec2 faceVel(vec2 f, vec2 gk, float gm, vec2 gd, vec2 gn) {
-  vec2 u = gk + gn * gm * (vnoise(vec2(dot(f, gn) / 70.0, dot(f, gd) / 110.0) + 4.0) - 0.5) * 1.1;
-  return clamp(u, vec2(-0.24), vec2(0.24));
+  vec2 fr = f / uR1;
+  vec2 u = gk + gn * gm * (vnoise(vec2(dot(fr, gn) / 70.0, dot(fr, gd) / 110.0) + 4.0) - 0.5) * 1.1;
+  float cap = min(0.24 * uR1, 0.45);
+  return clamp(u, vec2(-cap), vec2(cap));
 }
 // the flow across a face toward +ax, in cells a step: down the water's slope over six cells and
 // wandering on the paper, only between two wet cells. Worked out from the face alone, so both cells
 // agree on it; capped so a cell never sends out more than it holds
 float faceU(vec2 f, vec2 ax, float wetf, float comp) {
-  float g = (W(f + ax * 3.5) + W(f + ax * 2.5) - W(f - ax * 2.5) - W(f - ax * 3.5)) / 12.0;
+  float k = max(1.0, floor(3.0 * uR1 + 0.5));
+  float g = (W(f + ax * (k + 0.5)) + W(f + ax * (k - 0.5)) - W(f - ax * (k - 0.5)) - W(f - ax * (k + 0.5))) / (4.0 * k);
   float n = texture(uPaper, vec2(f.x, uSimH - f.y) / uScale / 900.0 + comp).r - 0.5;
-  return clamp((-g * uFlowG + n * uFlowN) * wetf * uK, -uFlowCap, uFlowCap);
+  return clamp((-g * uFlowG * uR1 * uR1 + n * uFlowN * uR1) * wetf * uK, -uFlowCap * uR1, uFlowCap * uR1);
 }
 // the wet front creeping into dry paper (cauliflower edges) and fresh water pushing into a damp wash
 // (a bloom), per face: the water (x) and the share of the donor's paint (y) that go from a donor
@@ -221,8 +227,9 @@ void main() {
 
   float wet = smoothstep(0.0, 0.03, w0);
   float sl = smoothstep(0.0, 0.03, wl), sr = smoothstep(0.0, 0.03, wr), sd = smoothstep(0.0, 0.03, wd), su = smoothstep(0.0, 0.03, wu);
-  float avg3 = (W(p + vec2(3, 0)) + W(p - vec2(3, 0)) + W(p + vec2(0, 3)) + W(p - vec2(0, 3))
-              + W(p + vec2(2, 2)) + W(p - vec2(2, 2)) + W(p + vec2(2, -2)) + W(p - vec2(2, -2))) / 8.0;
+  float k3 = max(1.0, floor(3.0 * uR1 + 0.5)), k2 = max(1.0, floor(2.0 * uR1 + 0.5));
+  float avg3 = (W(p + vec2(k3, 0)) + W(p - vec2(k3, 0)) + W(p + vec2(0, k3)) + W(p - vec2(0, k3))
+              + W(p + vec2(k2, k2)) + W(p - vec2(k2, k2)) + W(p + vec2(k2, -k2)) + W(p - vec2(k2, -k2))) / 8.0;
   float edge = clamp((w - avg3) * 4.5, 0.0, 1.0) * wet;
 
   // gravity: what the paper cannot hold slides downhill as wide runs, pigment with it.
@@ -265,9 +272,14 @@ void main() {
   vec3 P0g = P0 * lp, Plg = Pl * ll, Prg = Pr * lr, Pdg = Pd * ld, Pug = Pu * lu;
   vec3 adv = (aL > 0.0 ? Plg : P0g) * aL - (aR > 0.0 ? P0g : Prg) * aR
            + (aD > 0.0 ? Pdg : P0g) * aD - (aU > 0.0 ? P0g : Pug) * aU;
-  // bleeding into wet neighbours (dry paper takes none)
-  vec3 bleed = 0.15 * wet * ((Plg - P0g) * sl + (Prg - P0g) * sr + (Pdg - P0g) * sd + (Pug - P0g) * su);
-  float out0 = gout + max(aR, 0.0) + max(-aL, 0.0) + max(aU, 0.0) + max(-aD, 0.0) + 0.15 * wet * (sl + sr + sd + su);
+  // bleeding into wet neighbours (dry paper takes none), reaching as far in the look at any resolution
+  float kb = max(1.0, floor(uR1 + 0.5));
+  vec2 bx = vec2(kb, 0.0), by = vec2(0.0, kb);
+  vec4 bl = Wt(p - bx), br = Wt(p + bx), bd = Wt(p - by), bu = Wt(p + by);
+  float tl = smoothstep(0.0, 0.03, bl.r), tr = smoothstep(0.0, 0.03, br.r), td = smoothstep(0.0, 0.03, bd.r), tu = smoothstep(0.0, 0.03, bu.r);
+  vec3 bleed = 0.15 * wet * ((P(p - bx) * (1.0 - bl.b) - P0g) * tl + (P(p + bx) * (1.0 - br.b) - P0g) * tr
+                           + (P(p - by) * (1.0 - bd.b) - P0g) * td + (P(p + by) * (1.0 - bu.b) - P0g) * tu);
+  float out0 = gout + max(aR, 0.0) + max(-aL, 0.0) + max(aU, 0.0) + max(-aD, 0.0) + 0.15 * wet * (tl + tr + td + tu);
 
   // wide spread through wet paper: paint runs along a wet shape, feathering on the grain; a run's
   // trail evens out its water across (blunt, lumpy fronts), a stamped wash keeps its pools
@@ -449,16 +461,18 @@ void main() {
 const COPY_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uA, uB, uC, uE;
-uniform ivec2 uOff;
+uniform vec2 uDst, uSrc;
+uniform float uK2; // source px per px
 layout(location = 0) out vec4 o0;
 layout(location = 1) out vec4 o1;
 layout(location = 2) out vec4 o2;
 layout(location = 3) out vec4 o3;
 void main() {
-  ivec2 q = ivec2(gl_FragCoord.xy) - uOff;
-  ivec2 n = textureSize(uA, 0);
-  if (q.x < 0 || q.y < 0 || q.x >= n.x || q.y >= n.y) { o0 = o1 = o2 = o3 = vec4(0.0); return; }
-  o0 = texelFetch(uA, q, 0); o1 = texelFetch(uB, q, 0); o2 = texelFetch(uC, q, 0); o3 = texelFetch(uE, q, 0);
+  vec2 q = (gl_FragCoord.xy - uDst) * uK2 + uSrc;
+  vec2 n = vec2(textureSize(uA, 0));
+  if (q.x < 0.0 || q.y < 0.0 || q.x >= n.x || q.y >= n.y) { o0 = o1 = o2 = o3 = vec4(0.0); return; }
+  q /= n;
+  o0 = texture(uA, q); o1 = texture(uB, q); o2 = texture(uC, q); o3 = texture(uE, q);
 }`
 
 function program(vs: string, fs: string): WebGLProgram {
@@ -484,17 +498,25 @@ const cyProg = program(FULL_VS, COPY_FS)
 const STU = uniforms(stProg, [
   'uW', 'uP', 'uD', 'uF', 'uPaper', 'uTexel', 'uScale', 'uSimH', 'uK', 'uEvap', 'uFadeP', 'uWLoss', 'uDep',
   'uRim', 'uGran', 'uGrav', 'uStart', 'uStop', 'uTrail', 'uCreep', 'uCreepWet', 'uPDiff', 'uWDiff', 'uLiftK', 'uPR', 'uBloom',
-  'uFlowG', 'uFlowN', 'uFlowCap',
+  'uFlowG', 'uFlowN', 'uFlowCap', 'uR1',
 ])
 const SPU = uniforms(spProg, [
   'uW', 'uP', 'uD', 'uF', 'uPaper', 'uMask', 'uTexel', 'uSimSize', 'uScale', 'uSimH', 'uKind', 'uC', 'uR', 'uSeed', 'uWater',
   'uPig', 'uSkip', 'uPud', 'uA', 'uB', 'uE',
 ])
 const CPU = uniforms(cpProg, ['uP', 'uD', 'uF', 'uKp', 'uKd'])
-const CYU = uniforms(cyProg, ['uA', 'uB', 'uC', 'uE', 'uOff'])
+const CYU = uniforms(cyProg, ['uA', 'uB', 'uC', 'uE', 'uDst', 'uSrc', 'uK2'])
 const fullVao = gl.createVertexArray()
 
-const SIM_SCALE = 0.75 // sim px per css px
+// Every look is drawn for the logo on a 1440×900 desktop (630 css px) at 0.75 sim px per css px. A
+// screen draws it in design px (css px × design), so a phone shows the same painting as a desktop,
+// and runs the sim finer where the screen is sharp, within a budget of cells.
+const REF_LOGO = 630
+let simScale = 0.75 // sim px per css px
+let quality = 1 // drops when the frames come too slow
+const CELLS = +(query.get('cells') || 0) // a cell budget to try instead
+let design = 1 // design px per css px
+const ratio = () => simScale / design / 0.75 // sim px for every one the look was tuned at
 type State = { tex: WebGLTexture[]; fbo: WebGLFramebuffer }
 type Sim = { w: number; h: number; states: State[]; cur: number }
 let sim: Sim | null = null
@@ -635,7 +657,7 @@ function makeMask() {
   const x = c.getContext('2d')!
   x.fillStyle = '#000'
   x.fillRect(0, 0, c.width, c.height)
-  x.scale(SIM_SCALE, SIM_SCALE)
+  x.scale(simScale, simScale)
   x.strokeStyle = '#fff'
   x.lineWidth = logo.stroke * LOOK.fat
   x.lineCap = 'butt'
@@ -657,13 +679,20 @@ function makeMask() {
 
 // --- the view ----------------------------------------------------------------------------------------
 let stamped = false // the logo is on the sheet: from then on it is paint, and a resize keeps it
-function resize() {
+function resize(slower = false) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  const was = simScale
   canvas.width = Math.ceil(innerWidth * dpr)
   canvas.height = Math.ceil(innerHeight * dpr)
-  const w = Math.ceil(innerWidth * SIM_SCALE)
-  const h = Math.ceil(innerHeight * SIM_SCALE)
-  if (sim && sim.w === w && sim.h === h) return
+  // a resize after the stamp keeps the scale (and the logo), so the paint stays where it is
+  if (!stamped) design = REF_LOGO / (Math.min(innerWidth, innerHeight) * LOOK.logo)
+  if (!stamped || slower) {
+    const budget = CELLS || (matchMedia('(pointer: coarse)').matches ? 0.5e6 : 1.3e6)
+    simScale = Math.min(Math.max(0.75 * dpr, 0.75 * design), Math.sqrt(budget / (innerWidth * innerHeight)), 1.5 * design) * quality
+  }
+  const w = Math.ceil(innerWidth * simScale)
+  const h = Math.ceil(innerHeight * simScale)
+  if (sim && sim.w === w && sim.h === h && was === simScale) return
   const next = makeSim(w, h)
   if (sim) {
     const from = sim.states[sim.cur]
@@ -680,7 +709,14 @@ function resize() {
     gl.uniform1i(CYU.uB, 1)
     gl.uniform1i(CYU.uC, 2)
     gl.uniform1i(CYU.uE, 3)
-    gl.uniform2i(CYU.uOff, Math.round((w - sim.w) / 2), Math.round((h - sim.h) / 2))
+    if (was === simScale) {
+      gl.uniform2f(CYU.uDst, Math.round((w - sim.w) / 2), Math.round((h - sim.h) / 2))
+      gl.uniform2f(CYU.uSrc, 0, 0)
+    } else {
+      gl.uniform2f(CYU.uDst, w / 2, h / 2)
+      gl.uniform2f(CYU.uSrc, sim.w / 2, sim.h / 2)
+    }
+    gl.uniform1f(CYU.uK2, was / simScale)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     dropSim(sim)
@@ -715,7 +751,7 @@ function bindState(st: State, U: Record<'uW' | 'uP' | 'uD' | 'uF' | 'uPaper' | '
   gl.uniform1i(U.uF, 3)
   gl.uniform1i(U.uPaper, 4)
   gl.uniform2f(U.uTexel, 1 / s.w, 1 / s.h)
-  gl.uniform1f(U.uScale, SIM_SCALE)
+  gl.uniform1f(U.uScale, simScale / design)
   gl.uniform1f(U.uSimH, s.h)
 }
 
@@ -738,7 +774,8 @@ function step(K: number) {
   gl.uniform1f(STU.uDep, SHEET.dep)
   gl.uniform1f(STU.uRim, SHEET.rim)
   gl.uniform1f(STU.uGran, SHEET.gran)
-  gl.uniform2f(STU.uGrav, grav.x, grav.y)
+  gl.uniform2f(STU.uGrav, grav.x * ratio(), grav.y * ratio())
+  gl.uniform1f(STU.uR1, ratio())
   gl.uniform1f(STU.uStart, SHEET.start)
   gl.uniform1f(STU.uStop, SHEET.stop)
   gl.uniform1f(STU.uTrail, SHEET.trail)
@@ -747,7 +784,7 @@ function step(K: number) {
   gl.uniform1f(STU.uPDiff, SHEET.pdiff)
   gl.uniform1f(STU.uWDiff, SHEET.wdiff)
   gl.uniform1f(STU.uLiftK, SHEET.lift)
-  gl.uniform1f(STU.uPR, SHEET.pr)
+  gl.uniform1f(STU.uPR, SHEET.pr * ratio())
   gl.uniform1f(STU.uBloom, SHEET.bloom)
   gl.uniform1f(STU.uFlowG, SHEET.flowG)
   gl.uniform1f(STU.uFlowN, SHEET.flowN)
@@ -774,6 +811,7 @@ if (query.has('stats')) {
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null)
     return out
   }
+  ;(window as unknown as { __wcScale: () => number[] }).__wcScale = () => [simScale, ratio(), sim!.w, sim!.h, quality]
 }
 
 const WATER = 0
@@ -808,8 +846,8 @@ function stamp(o: Stamp) {
   gl.uniform1i(SPU.uMask, 5)
   gl.uniform2f(SPU.uSimSize, s.w, s.h)
   gl.uniform1i(SPU.uKind, o.kind)
-  gl.uniform2f(SPU.uC, o.x, o.y)
-  gl.uniform1f(SPU.uR, o.r)
+  gl.uniform2f(SPU.uC, o.x * design, o.y * design)
+  gl.uniform1f(SPU.uR, o.r * design)
   gl.uniform1f(SPU.uSeed, o.seed)
   gl.uniform1f(SPU.uWater, o.water)
   gl.uniform1f(SPU.uPig, o.pig)
@@ -1013,6 +1051,8 @@ addEventListener('resize', () => {
 let last = performance.now()
 let owed = 0
 let clock = 0
+let ema = 1 / 60
+let slow = 0
 function frame(nowMs: number) {
   requestAnimationFrame(frame)
   const dt = Math.min(0.1, Math.max(0, (nowMs - last) / 1000))
@@ -1024,6 +1064,15 @@ function frame(nowMs: number) {
   }
   lean(dt, clock)
   while (pending.length) stamp(pending.shift()!)
+  // frames too slow for a second: a coarser sheet (twice at most)
+  ema += (dt - ema) * 0.1
+  slow = stamped && clock > 2 && quality > 0.5 && ema > 0.02 ? slow + dt : 0
+  if (slow > 1) {
+    slow = 0
+    ema = 1 / 60
+    quality *= 0.7
+    resize(true)
+  }
   owed += dt
   const steps = Math.min(3, Math.floor(owed * 60 + 0.01))
   if (!steps) return
