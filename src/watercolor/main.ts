@@ -982,6 +982,12 @@ function lean(dt: number, clock: number) {
   grav.y += (ty - grav.y) * ease
 }
 
+// iOS grants the tilt only from a touchend or click (a pointerdown is not a gesture there), so ask then
+canvas.addEventListener('touchend', askOrientation, { passive: true })
+canvas.addEventListener('click', (e) => {
+  if ((e as PointerEvent).pointerType !== 'mouse') askOrientation()
+})
+
 // --- the visitor's hand ------------------------------------------------------------------------------
 // a press that does not move is a drop of water, on release (one a press, however long it is held);
 // one that moves leans the sheet
@@ -996,7 +1002,6 @@ canvas.addEventListener('pointerdown', (e) => {
     // a pointer the browser no longer tracks: go on without capture
   }
   document.body.classList.add('taken')
-  if (e.pointerType !== 'mouse') askOrientation()
   presses.set(e.pointerId, { x0: e.clientX, y0: e.clientY, moved: false })
 })
 canvas.addEventListener('pointermove', (e) => {
