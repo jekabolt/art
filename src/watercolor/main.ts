@@ -58,6 +58,11 @@ const SHEET = {
   wdiff: 0.24, // water evening out along a run
   pr: 2.5, // sim px that spread reaches
   lift: 10, // how much fresh water lifts settled pigment
+  // paint carried from a wash's full middle toward its thin edge (the rim): down the water's slope,
+  // wandering on the paper, at most flowCap cells a step
+  flowG: 3,
+  flowN: 0.12,
+  flowCap: 0.06,
   evap: 0.0006, // water lost a step
   float: 60, // seconds: pigment left floating fades
   wloss: 0.03,
@@ -67,6 +72,11 @@ const SHEET = {
   sub: 2, // steps a 60th of a second
   kp: 0.55, // strength of the floating pigment
   kd: 1.1, // strength of the settled pigment
+}
+
+for (const [k, v] of new URLSearchParams(location.search)) {
+  const key = k.startsWith('sheet.') ? (k.slice(6) as keyof typeof SHEET) : null
+  if (key && key in SHEET && Number.isFinite(+v)) (SHEET as Record<string, number>)[key] = +v
 }
 
 // --- the hand ----------------------------------------------------------------------------------------
@@ -140,6 +150,7 @@ uniform float uScale, uSimH, uK;
 uniform float uEvap, uFadeP, uWLoss, uDep, uRim, uGran;
 uniform vec2 uGrav;
 uniform float uStart, uStop, uTrail, uCreep, uCreepWet, uPDiff, uWDiff, uLiftK, uPR, uBloom;
+uniform float uFlowG, uFlowN, uFlowCap;
 layout(location = 0) out vec4 oW;
 layout(location = 1) out vec4 oP;
 layout(location = 2) out vec4 oD;
@@ -169,6 +180,31 @@ vec2 faceVel(vec2 f, vec2 gk, float gm, vec2 gd, vec2 gn) {
   vec2 u = gk + gn * gm * (vnoise(vec2(dot(f, gn) / 70.0, dot(f, gd) / 110.0) + 4.0) - 0.5) * 1.1;
   return clamp(u, vec2(-0.24), vec2(0.24));
 }
+// the flow across a face toward +ax, in cells a step: down the water's slope over six cells and
+// wandering on the paper, only between two wet cells. Worked out from the face alone, so both cells
+// agree on it; capped so a cell never sends out more than it holds
+float faceU(vec2 f, vec2 ax, float wetf, float comp) {
+  float g = (W(f + ax * 3.5) + W(f + ax * 2.5) - W(f - ax * 2.5) - W(f - ax * 3.5)) / 12.0;
+  float n = texture(uPaper, vec2(f.x, uSimH - f.y) / uScale / 900.0 + comp).r - 0.5;
+  return clamp((-g * uFlowG + n * uFlowN) * wetf * uK, -uFlowCap, uFlowCap);
+}
+// the wet front creeping into dry paper (cauliflower edges) and fresh water pushing into a damp wash
+// (a bloom), per face: the water (x) and the share of the donor's paint (y) that go from a donor
+// holding wd (flag gd) into the receiver at r holding wr. The donor loses what the receiver gains.
+vec2 creepAt(vec2 r, float wr, float wd, float gd) {
+  if (wd < min(uBloom, uCreep * 0.7) || wr >= wd * 0.3) return vec2(0.0);
+  vec2 c = vec2(r.x, uSimH - r.y) / uScale;
+  float lobe = texture(uPaper, c / 2400.0).r;
+  float lobe2 = vnoise(c / 9.0 + 4.4);
+  if (wr < 0.01) {
+    float cthr = uCreep + 0.6 * lobe + 0.25 * lobe2;
+    float tthr = uCreep * 0.7 + 0.55 * vnoise(c / 24.0 + 8.8) + 0.3 * lobe2;
+    // a run's bead creeps sideways readily (lumpy edges); a stamped wash only bleeds from its pools
+    if ((gd > 0.3 && gd < 0.8 && wd > tthr) || wd > cthr * uCreepWet) return vec2(wd * 0.2, 0.2);
+  }
+  if (uBloom > 0.0 && wd > uBloom + 0.5 * lobe2) return vec2((wd - wr) * 0.12, 0.0);
+  return vec2(0.0);
+}
 void main() {
   vec2 p = gl_FragCoord.xy;
   vec2 css = vec2(p.x, uSimH - p.y) / uScale;
@@ -179,14 +215,12 @@ void main() {
   float wl = nl.r, wr = nr.r, wd = nd.r, wu = nu.r;
   vec3 P0 = P(p);
   vec3 Pl = P(p - vec2(1, 0)), Pr = P(p + vec2(1, 0)), Pd = P(p - vec2(0, 1)), Pu = P(p + vec2(0, 1));
+  // the share of what a cell holds it may give away this step (kept from the last step in W.b, so
+  // both sides of a face read the same number): a cell never gives more than it has
+  float lp = 1.0 - w4.b, ll = 1.0 - nl.b, lr = 1.0 - nr.b, ld = 1.0 - nd.b, lu = 1.0 - nu.b;
 
-  // water runs from the full middle of a wash toward its thin edges, carrying pigment
-  vec2 g3 = vec2(W(p + vec2(3, 0)) - W(p - vec2(3, 0)), W(p + vec2(0, 3)) - W(p - vec2(0, 3))) / 6.0;
-  float wet = smoothstep(0.0, 0.03, w);
-  vec2 v = -g3 * 9.0 * wet;
-  vec2 tp = css / 900.0;
-  v += (vec2(texture(uPaper, tp).r, texture(uPaper, tp + 0.37).r) - 0.5) * 1.6 * wet;
-  float vl = length(v); if (vl > 1.4) v *= 1.4 / vl;
+  float wet = smoothstep(0.0, 0.03, w0);
+  float sl = smoothstep(0.0, 0.03, wl), sr = smoothstep(0.0, 0.03, wr), sd = smoothstep(0.0, 0.03, wd), su = smoothstep(0.0, 0.03, wu);
   float avg3 = (W(p + vec2(3, 0)) + W(p - vec2(3, 0)) + W(p + vec2(0, 3)) + W(p - vec2(0, 3))
               + W(p + vec2(2, 2)) + W(p - vec2(2, 2)) + W(p + vec2(2, -2)) + W(p - vec2(2, -2))) / 8.0;
   float edge = clamp((w - avg3) * 4.5, 0.0, 1.0) * wet;
@@ -196,7 +230,7 @@ void main() {
   vec2 gk = vec2(uGrav.x, -uGrav.y) * uK;
   float gm = length(gk);
   float hd = 1.0;
-  float dWg = 0.0; vec3 dPg = vec3(0.0);
+  float dWg = 0.0, gout = 0.0; vec3 dPg = vec3(0.0);
   if (gm > 1e-4) {
     // conservative upwind transport: every face's flow is worked out the same way from both sides
     vec2 gd = gk / gm, gn = vec2(-gd.y, gd.x);
@@ -210,59 +244,66 @@ void main() {
     float uL = faceVel(p - vec2(0.5, 0.0), gk, gm, gd, gn).x;
     float uU = faceVel(p + vec2(0.0, 0.5), gk, gm, gd, gn).y;
     float uD = faceVel(p - vec2(0.0, 0.5), gk, gm, gd, gn).y;
-    float cR = uR > 0.0 ? -e0 * uR : er * -uR;  // + into p, - out of p
-    float cL = uL > 0.0 ? el * uL : -e0 * -uL;
-    float cU = uU > 0.0 ? -e0 * uU : eu * -uU;
-    float cD = uD > 0.0 ? ed * uD : -e0 * -uD;
+    float cR = uR > 0.0 ? -e0 * uR * lp : er * -uR * lr;  // + into p, - out of p
+    float cL = uL > 0.0 ? el * uL * ll : -e0 * -uL * lp;
+    float cU = uU > 0.0 ? -e0 * uU * lp : eu * -uU * lu;
+    float cD = uD > 0.0 ? ed * uD * ld : -e0 * -uD * lp;
+    gout = e0 * (max(uR, 0.0) + max(-uL, 0.0) + max(uU, 0.0) + max(-uD, 0.0)) / max(w0, 1e-3);
     dWg = cR + cL + cU + cD;
     vec3 c0 = conc(P0, w0);
     dPg = (cR > 0.0 ? conc(Pr, wr) : c0) * cR + (cL > 0.0 ? conc(Pl, wl) : c0) * cL
         + (cU > 0.0 ? conc(Pu, wu) : c0) * cU + (cD > 0.0 ? conc(Pd, wd) : c0) * cD;
   }
 
-  // pigment: carried by the flow, bleeding into wet neighbours (dry paper takes none)
-  vec3 pg = P(p - v * uK);
-  float sl = smoothstep(0.0, 0.03, wl), sr = smoothstep(0.0, 0.03, wr), sd = smoothstep(0.0, 0.03, wd), su = smoothstep(0.0, 0.03, wu);
-  float sn = sl + sr + sd + su;
-  vec3 pav = Pl * sl + Pr * sr + Pd * sd + Pu * su;
-  pav = sn > 0.0 ? pav / sn : vec3(0.0);
-  pg = mix(pg, pav, 0.6 * wet * sn * 0.25);
+  // Everything below moves paint between cells and never makes it: each exchange is worked out the
+  // same way from both sides of a face, so one cell loses exactly what the other gains.
+  // water runs from the full middle of a wash toward its thin edges, carrying pigment
+  float aR = faceU(p + vec2(0.5, 0.0), vec2(1, 0), min(wet, sr), 0.0);
+  float aL = faceU(p - vec2(0.5, 0.0), vec2(1, 0), min(wet, sl), 0.0);
+  float aU = faceU(p + vec2(0.0, 0.5), vec2(0, 1), min(wet, su), 0.37);
+  float aD = faceU(p - vec2(0.0, 0.5), vec2(0, 1), min(wet, sd), 0.37);
+  vec3 P0g = P0 * lp, Plg = Pl * ll, Prg = Pr * lr, Pdg = Pd * ld, Pug = Pu * lu;
+  vec3 adv = (aL > 0.0 ? Plg : P0g) * aL - (aR > 0.0 ? P0g : Prg) * aR
+           + (aD > 0.0 ? Pdg : P0g) * aD - (aU > 0.0 ? P0g : Pug) * aU;
+  // bleeding into wet neighbours (dry paper takes none)
+  vec3 bleed = 0.15 * wet * ((Plg - P0g) * sl + (Prg - P0g) * sr + (Pdg - P0g) * sd + (Pug - P0g) * su);
+  float out0 = gout + max(aR, 0.0) + max(-aL, 0.0) + max(aU, 0.0) + max(-aD, 0.0) + 0.15 * wet * (sl + sr + sd + su);
 
-  // wide spread through wet paper: paint runs along a wet shape, feathering on the grain
-  if (uPDiff > 0.0 && w0 > 0.02) {
-    vec3 acc = vec3(0.0); float ws = 0.0, wacc = 0.0;
-    for (int i = 0; i < 8; i++) {
+  // wide spread through wet paper: paint runs along a wet shape, feathering on the grain; a run's
+  // trail evens out its water across (blunt, lumpy fronts), a stamped wash keeps its pools
+  vec3 spread = vec3(0.0); float wsp = 0.0;
+  float s0 = smoothstep(0.02, 0.08, w0);
+  if (uPDiff > 0.0 && s0 > 0.0) {
+    float wk0 = (flag > 0.3 && flag < 0.8) ? 1.0 : 0.25;
+    for (int i = 0; i < 4; i++) {
       float a = float(i) * 0.7853982 + 0.4;
-      vec2 q = p + vec2(cos(a), sin(a)) * uPR;
-      float wi = W(q);
-      float s = smoothstep(0.02, 0.08, wi);
-      acc += P(q) * s; ws += s; wacc += wi * s;
-    }
-    if (ws > 0.0) {
-      float grain = 0.25 + 1.5 * vnoise(css / 11.0 + 3.7) * vnoise(css / 37.0 + 9.1) + 0.6 * (pp - 0.5);
-      float rate = uPDiff * max(grain, 0.05) * clamp(w0 * 1.4, 0.2, 1.8) * (ws / 8.0);
-      pg = mix(pg, acc / ws, clamp(rate, 0.0, 0.9));
-      // a run's trail evens out across (blunt, lumpy fronts); a stamped wash keeps its pools
-      float wk = (flag > 0.3 && flag < 0.8) ? 1.0 : 0.25;
-      w = mix(w, wacc / ws, clamp(uWDiff * wk * ws / 8.0, 0.0, 0.9));
+      vec2 o = floor(vec2(cos(a), sin(a)) * uPR + 0.5);
+      for (int k = 0; k < 2; k++) {
+        vec2 oo = k == 0 ? o : -o;
+        vec4 q4 = Wt(p + oo);
+        float sq = smoothstep(0.02, 0.08, q4.r);
+        if (sq <= 0.0) continue;
+        vec2 mc = vec2(p.x + oo.x * 0.5, uSimH - (p.y + oo.y * 0.5)) / uScale;
+        float grain = 0.25 + 1.5 * vnoise(mc / 11.0 + 3.7) * vnoise(mc / 37.0 + 9.1) + 0.6 * (texture(uPaper, mc / 512.0).r - 0.5);
+        float kk = uPDiff * max(grain, 0.05) * clamp(min(w0, q4.r) * 1.4, 0.2, 1.8) * s0 * sq / 8.0;
+        spread += (P(p + oo) * (1.0 - q4.b) - P0g) * kk;
+        out0 += kk;
+        float wkq = (q4.g > 0.3 && q4.g < 0.8) ? 1.0 : 0.25;
+        wsp += (q4.r - w0) * uWDiff * max(wk0, wkq) * s0 * sq / 8.0;
+      }
     }
   }
 
-  // the wet front creeps into dry paper unevenly: cauliflower edges; fresh water pushes into a damp
-  // wash the same way (a bloom)
-  float nmax = max(max(wl, wr), max(wd, wu));
-  float lobe = texture(uPaper, css / 2400.0).r;
-  float lobe2 = vnoise(css / 9.0 + 4.4);
-  // a run's bead creeps sideways readily (lumpy edges); a stamped wash only bleeds from its pools
-  float ntr = max(max(nl.g > 0.3 && nl.g < 0.8 ? wl : 0.0, nr.g > 0.3 && nr.g < 0.8 ? wr : 0.0),
-                  max(nd.g > 0.3 && nd.g < 0.8 ? wd : 0.0, nu.g > 0.3 && nu.g < 0.8 ? wu : 0.0));
-  float cthr = uCreep + 0.6 * lobe + 0.25 * lobe2;
-  float tthr = uCreep * 0.7 + 0.55 * vnoise(css / 24.0 + 8.8) + 0.3 * lobe2;
-  if (w0 < 0.01 && (ntr > tthr || nmax > cthr * uCreepWet)) { w = nmax * 0.55; pg = pav * 0.6; }
-  else if (uBloom > 0.0 && w0 < nmax * 0.3 && nmax > uBloom + 0.5 * lobe2) { w = max(w, nmax * 0.6); }
+  // the wet front creeps into dry paper unevenly; fresh water pushes into a damp wash the same way
+  vec2 iL = creepAt(p, w0, wl, nl.g), iR = creepAt(p, w0, wr, nr.g), iD = creepAt(p, w0, wd, nd.g), iU = creepAt(p, w0, wu, nu.g);
+  vec2 xL = creepAt(p - vec2(1, 0), wl, w0, flag), xR = creepAt(p + vec2(1, 0), wr, w0, flag);
+  vec2 xD = creepAt(p - vec2(0, 1), wd, w0, flag), xU = creepAt(p + vec2(0, 1), wu, w0, flag);
+  float dWc = iL.x * ll + iR.x * lr + iD.x * ld + iU.x * lu - (xL.x + xR.x + xD.x + xU.x) * lp;
+  vec3 dPc = Plg * iL.y + Prg * iR.y + Pdg * iD.y + Pug * iU.y - P0g * (xL.y + xR.y + xD.y + xU.y);
+  out0 += xL.y + xR.y + xD.y + xU.y;
 
-  w += dWg;
-  pg = max(pg + dPg, vec3(0.0));
+  w = w0 + dWg + wsp + dWc;
+  vec3 pg = max(P0 + adv + bleed + spread + dPc + dPg, vec3(0.0));
   w = mix(w, (wl + wr + wd + wu) * 0.25, uWLoss * wet);
   float ev = uEvap * uK * (1.0 + 1.5 * edge) * (0.65 + 0.7 * vnoise(css / 160.0 + 9.0));
   w = max(0.0, w - ev);
@@ -289,7 +330,7 @@ void main() {
   if (any(isnan(chk)) || any(isinf(chk))) { w = 0.0; flag = 0.0; pg = vec3(0.0); d = vec3(0.0); f = vec3(0.0); }
   w = clamp(w, 0.0, 3.0);
   pg = clamp(pg, 0.0, 8.0); d = clamp(d, 0.0, 8.0); f = clamp(f, 0.0, 8.0);
-  oW = vec4(w, flag, 0.0, 0.0);
+  oW = vec4(w, flag, 1.0 - min(1.0, 0.9 / max(out0, 1e-3)), 0.0);
   oP = vec4(pg * uFadeP, 0.0);
   oD = vec4(d, 0.0);
   oF = vec4(f, 0.0);
@@ -377,7 +418,7 @@ void main() {
     vec3 l = Dn * m * 0.3; Dn -= l; Pn += l;
   }
   addP *= max(0.0, 1.0 - (Pn.r + Pn.g + Pn.b) / 9.0);
-  oW = vec4(min(W + addW, 3.0), addW > 0.03 ? 1.0 : G, 0.0, 0.0);
+  oW = vec4(min(W + addW, 3.0), addW > 0.03 ? 1.0 : G, w4.b, 0.0);
   oP = vec4(min(Pn + addP, vec3(8.0)), 0.0);
   oD = vec4(Dn, 0.0);
   oF = vec4(Fn, 0.0);
@@ -398,10 +439,9 @@ void main() {
   vec3 k = texture(uP, vUv).rgb * uKp + d * uKd;
   if (any(isnan(k)) || any(isinf(k))) k = vec3(0.0);
   k = clamp(k, 0.0, 24.0);
-  // mud: the darkness all three channels share eases off toward a limit, so a pile of mixed pigment
-  // (the bead at a run's tip) stays a deep colour and never goes black
+  // only a runaway pile (far darker than any wash) is eased off before it reaches black
   float n = min(k.r, min(k.g, k.b));
-  k -= n - (n < 0.45 ? n : 0.45 + 0.55 * (1.0 - exp((0.45 - n) / 0.55)));
+  if (n > 2.5) k -= n - 2.5 - 0.5 * (1.0 - exp((2.5 - n) / 0.5));
   outColor = vec4(exp(-k), 1.0);
 }`
 
@@ -444,6 +484,7 @@ const cyProg = program(FULL_VS, COPY_FS)
 const STU = uniforms(stProg, [
   'uW', 'uP', 'uD', 'uF', 'uPaper', 'uTexel', 'uScale', 'uSimH', 'uK', 'uEvap', 'uFadeP', 'uWLoss', 'uDep',
   'uRim', 'uGran', 'uGrav', 'uStart', 'uStop', 'uTrail', 'uCreep', 'uCreepWet', 'uPDiff', 'uWDiff', 'uLiftK', 'uPR', 'uBloom',
+  'uFlowG', 'uFlowN', 'uFlowCap',
 ])
 const SPU = uniforms(spProg, [
   'uW', 'uP', 'uD', 'uF', 'uPaper', 'uMask', 'uTexel', 'uSimSize', 'uScale', 'uSimH', 'uKind', 'uC', 'uR', 'uSeed', 'uWater',
@@ -708,8 +749,31 @@ function step(K: number) {
   gl.uniform1f(STU.uLiftK, SHEET.lift)
   gl.uniform1f(STU.uPR, SHEET.pr)
   gl.uniform1f(STU.uBloom, SHEET.bloom)
+  gl.uniform1f(STU.uFlowG, SHEET.flowG)
+  gl.uniform1f(STU.uFlowN, SHEET.flowN)
+  gl.uniform1f(STU.uFlowCap, SHEET.flowCap)
   gl.drawArrays(gl.TRIANGLES, 0, 3)
   s.cur = 1 - s.cur
+}
+
+// ?stats: the water and the paint on the sheet (floating, settled, fixed), to check nothing makes paint
+if (query.has('stats')) {
+  ;(window as unknown as { __wcTotal: () => number[] }).__wcTotal = () => {
+    const s = sim!
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, s.states[s.cur].fbo)
+    const buf = new Float32Array(s.w * s.h * 4)
+    const out: number[] = []
+    for (let i = 0; i < 4; i++) {
+      gl.readBuffer(gl.COLOR_ATTACHMENT0 + i)
+      gl.readPixels(0, 0, s.w, s.h, gl.RGBA, gl.FLOAT, buf)
+      let t = 0
+      for (let j = 0; j < buf.length; j += 4) t += i ? buf[j] + buf[j + 1] + buf[j + 2] : buf[j]
+      out.push(Math.round(t))
+    }
+    gl.readBuffer(gl.COLOR_ATTACHMENT0)
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null)
+    return out
+  }
 }
 
 const WATER = 0
