@@ -44,8 +44,7 @@ export function pathSegments(): Seg[] {
  *  half a stroke at a right angle, less at an obtuse one (w/2 / tan(α/2)), nothing at a free end
  *  or where it stops on another bar's side (that bar covers it). Rectangles then add up to the mark
  *  without corners sticking out. */
-function withJoins(segs: Seg[]): Seg[] {
-  const w = LOGO_STROKE
+function withJoins(segs: Seg[], w: number): Seg[] {
   const same = (x1: number, y1: number, x2: number, y2: number) => Math.hypot(x1 - x2, y1 - y2) < 0.5
   const extAt = (me: Seg, px: number, py: number, ox: number, oy: number) => {
     // (ox, oy): my other end; my direction away from the joint is from P to it
@@ -83,7 +82,7 @@ function withJoins(segs: Seg[]): Seg[] {
 }
 
 
-/** The logo's bars, joins closed. */
-export function logoBars(): Seg[] {
-  return withJoins(pathSegments())
+/** The logo's bars, joins closed for a stroke `w` wide (the logo's own by default). */
+export function logoBars(w = LOGO_STROKE): Seg[] {
+  return withJoins(pathSegments(), w)
 }
